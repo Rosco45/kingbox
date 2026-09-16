@@ -44,11 +44,11 @@ export function formatTmdbMedia(item, forcedType = null) {
     synopsis: item.overview || 'Aucun résumé en français disponible pour le moment.',
     cast: item.credits?.cast?.slice(0, 5).map(c => c.name) || [],
     trending: true,
-    videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    videoUrl: "https://vjs.zencdn.net/v/oceans.mp4",
     episodes: type !== 'movie' ? [
-      { number: 1, title: "Épisode 1 : Le Début", duration: "24 min", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" },
-      { number: 2, title: "Épisode 2 : L'Éveil", duration: "25 min", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4" },
-      { number: 3, title: "Épisode 3 : L'Épreuve", duration: "23 min", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" }
+      { number: 1, title: "Épisode 1 : Le Début", duration: "24 min", videoUrl: "https://vjs.zencdn.net/v/oceans.mp4" },
+      { number: 2, title: "Épisode 2 : L'Éveil", duration: "25 min", videoUrl: "https://media.w3.org/2010/05/sintel/trailer_hd.mp4" },
+      { number: 3, title: "Épisode 3 : L'Épreuve", duration: "23 min", videoUrl: "https://vjs.zencdn.net/v/oceans.mp4" }
     ] : undefined
   };
 }
