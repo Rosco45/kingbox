@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "sync:android": "npm run build && npx cap sync android",
+    "build:apk": "npm run build && npx cap sync android && cd android && JAVA_HOME=/home/roserick/.jdks/jbr-21.0.11 ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ../Kingbox.apk && cd ..",
     "open:android": "npx cap open android",
     "lint": "oxlint",
     "preview": "vite preview"
