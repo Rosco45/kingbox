@@ -1,0 +1,8 @@
+{
+  "appId": "com.roserick.kingbox",
+  "appName": "Kingbox",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}

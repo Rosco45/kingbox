@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kingbox</string>
+    <string name="title_activity_main">Kingbox</string>
+    <string name="package_name">com.roserick.kingbox</string>
+    <string name="custom_url_scheme">com.roserick.kingbox</string>
+</resources>
