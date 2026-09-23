@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { X, Play, Heart, Star, Share2, Film, Check, Download, Tv } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Play, Heart, Star, Share2, Check, Download, Tv, Calendar, Clock, Loader2, Sparkles, Film } from 'lucide-react';
+import { getTmdbApiKey, fetchTvSeasonsInfo, fetchSeasonEpisodes } from '../utils/tmdb';
 
 export default function MediaModal({ 
   item, 
@@ -10,6 +11,67 @@ export default function MediaModal({
   onToggleFavorite 
 }) {
   const [copied, setCopied] = useState(false);
+  
+  // Real TMDB Seasons & Episodes state
+  const [seasons, setSeasons] = useState([]);
+  const [selectedSeason, setSelectedSeason] = useState(1);
+  const [episodes, setEpisodes] = useState([]);
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+
+  const tmdbKey = getTmdbApiKey();
+  const isShow = item?.type === 'tv' || item?.type === 'anime';
+
+  // Load real TMDB seasons on mount
+  useEffect(() => {
+    if (!item) return;
+
+    let isMounted = true;
+    const loadSeasons = async () => {
+      if (isShow && item.tmdbId && tmdbKey) {
+        setLoadingEpisodes(true);
+        try {
+          const seasonList = await fetchTvSeasonsInfo(tmdbKey, item.tmdbId);
+          if (isMounted) {
+            if (seasonList.length > 0) {
+              setSeasons(seasonList);
+              const firstSeasonNum = seasonList[0].season_number || 1;
+              setSelectedSeason(firstSeasonNum);
+              const epList = await fetchSeasonEpisodes(tmdbKey, item.tmdbId, firstSeasonNum);
+              if (isMounted) setEpisodes(epList);
+            } else {
+              setEpisodes(item.episodes || []);
+            }
+          }
+        } catch (err) {
+          console.error('Erreur chargement saisons TMDB:', err);
+          if (isMounted) setEpisodes(item.episodes || []);
+        } finally {
+          if (isMounted) setLoadingEpisodes(false);
+        }
+      } else {
+        setEpisodes(item.episodes || []);
+      }
+    };
+
+    loadSeasons();
+    return () => { isMounted = false; };
+  }, [item, isShow, tmdbKey]);
+
+  // Handle Season switch
+  const handleSeasonChange = async (seasonNum) => {
+    setSelectedSeason(seasonNum);
+    if (item?.tmdbId && tmdbKey) {
+      setLoadingEpisodes(true);
+      try {
+        const epList = await fetchSeasonEpisodes(tmdbKey, item.tmdbId, seasonNum);
+        setEpisodes(epList);
+      } catch (err) {
+        console.error(`Erreur chargement saison ${seasonNum}:`, err);
+      } finally {
+        setLoadingEpisodes(false);
+      }
+    }
+  };
 
   if (!item) return null;
 
@@ -136,7 +198,7 @@ export default function MediaModal({
                 {item.duration}
               </span>
               <span className="px-2.5 py-1 rounded-md bg-zinc-800/60 font-semibold text-zinc-400 border border-zinc-700/50">
-                Audio: Français (VF) / VOSTFR
+                Audio: Français (VF) / Multi-langues
               </span>
             </div>
 
@@ -171,60 +233,131 @@ export default function MediaModal({
               </div>
             )}
 
-            {/* If Series or Anime: Episodes List (Moviebox Style) */}
-            {(item.type === 'tv' || item.type === 'anime') && item.episodes && (
-              <div className="pt-4 border-t border-zinc-800 space-y-4">
-                <div className="flex items-center justify-between">
+            {/* REAL SEASONS & EPISODES PICKER (TMDB Live Integration) */}
+            {isShow && (
+              <div className="pt-6 border-t border-zinc-800 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-2">
                     <Tv className="w-5 h-5 text-red-500" />
-                    <h3 className="text-base font-bold text-white">
-                      Épisodes disponibles
+                    <h3 className="text-base sm:text-lg font-bold text-white">
+                      Épisodes & Saisons
                     </h3>
                   </div>
-                  <span className="text-xs font-medium text-zinc-400">
-                    Saison 1 ({item.episodes.length} épisodes)
-                  </span>
-                </div>
 
-                <div className="space-y-2.5">
-                  {item.episodes.map((ep) => (
-                    <div
-                      key={ep.number}
-                      className="group/ep flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-colors"
-                    >
-                      <div 
-                        onClick={() => onPlay({ ...item, currentEpisode: ep, videoUrl: ep.videoUrl || item.videoUrl })}
-                        className="flex items-center space-x-3 cursor-pointer flex-1"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-zinc-800 group-hover/ep:bg-red-600 text-zinc-300 group-hover/ep:text-white flex items-center justify-center font-bold text-xs transition-colors shrink-0">
-                          <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-zinc-200 group-hover/ep:text-white">
-                            Épisode {ep.number} : {ep.title}
-                          </p>
-                          <span className="text-xs text-zinc-500">Durée: {ep.duration}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
+                  {/* Season Selector Tabs */}
+                  {seasons.length > 1 && (
+                    <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-1">
+                      {seasons.map((s) => (
                         <button
-                          onClick={() => onDownload?.(item, ep)}
-                          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 transition-colors"
-                          title={`Télécharger l'épisode ${ep.number}`}
+                          key={s.id || s.season_number}
+                          onClick={() => handleSeasonChange(s.season_number)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                            selectedSeason === s.season_number
+                              ? 'bg-red-600 text-white shadow-md shadow-red-600/30'
+                              : 'bg-zinc-800/80 text-zinc-400 hover:text-white border border-zinc-700/60'
+                          }`}
                         >
-                          <Download className="w-4 h-4" />
+                          {s.name || `Saison ${s.season_number}`}
                         </button>
-                        <button 
-                          onClick={() => onPlay({ ...item, currentEpisode: ep, videoUrl: ep.videoUrl || item.videoUrl })}
-                          className="text-xs font-semibold text-red-400 group-hover/ep:text-red-300 px-2 py-1"
-                        >
-                          Regarder
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
+
+                {/* Episodes List */}
+                {loadingEpisodes ? (
+                  <div className="py-12 flex flex-col items-center justify-center space-y-2 text-zinc-400">
+                    <Loader2 className="w-6 h-6 animate-spin text-red-500" />
+                    <span className="text-xs">Chargement des épisodes en haute définition...</span>
+                  </div>
+                ) : episodes && episodes.length > 0 ? (
+                  <div className="space-y-3">
+                    {episodes.map((ep) => (
+                      <div
+                        key={ep.number}
+                        className="group/ep flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-all gap-3"
+                      >
+                        <div 
+                          onClick={() => onPlay({ 
+                            ...item, 
+                            currentEpisode: { ...ep, season: selectedSeason }, 
+                            videoUrl: ep.videoUrl || item.videoUrl 
+                          })}
+                          className="flex items-start sm:items-center space-x-3.5 cursor-pointer flex-1"
+                        >
+                          {/* Thumbnail / Still preview */}
+                          <div className="relative w-24 sm:w-28 aspect-video rounded-xl overflow-hidden bg-zinc-800 shrink-0">
+                            {ep.still ? (
+                              <img src={ep.still} alt={ep.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-600">
+                                <Film className="w-6 h-6" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 group-hover/ep:bg-black/10 transition-colors flex items-center justify-center">
+                              <div className="w-7 h-7 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg transform group-hover/ep:scale-110 transition-transform">
+                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                              </div>
+                            </div>
+                            <span className="absolute bottom-1 right-1 px-1 rounded bg-black/80 text-[9px] font-mono text-zinc-300">
+                              {ep.duration}
+                            </span>
+                          </div>
+
+                          {/* Episode Title & Synopsis */}
+                          <div className="space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-bold text-red-400">
+                                Épisode {ep.number}
+                              </span>
+                              {ep.rating && (
+                                <span className="text-[10px] text-amber-400 flex items-center space-x-0.5">
+                                  <Star className="w-3 h-3 fill-amber-400" />
+                                  <span>{ep.rating}</span>
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-sm font-semibold text-zinc-100 group-hover/ep:text-white line-clamp-1">
+                              {ep.title}
+                            </h4>
+                            {ep.overview && (
+                              <p className="text-xs text-zinc-400 line-clamp-2 max-w-lg">
+                                {ep.overview}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Episode Action Buttons */}
+                        <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+                          <button
+                            onClick={() => onDownload?.(item, { ...ep, season: selectedSeason })}
+                            className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 transition-colors border border-zinc-700/60"
+                            title={`Télécharger l'épisode ${ep.number}`}
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          
+                          <button 
+                            onClick={() => onPlay({ 
+                              ...item, 
+                              currentEpisode: { ...ep, season: selectedSeason }, 
+                              videoUrl: ep.videoUrl || item.videoUrl 
+                            })}
+                            className="flex items-center space-x-1.5 px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-600/20"
+                          >
+                            <Play className="w-3 h-3 fill-white" />
+                            <span>Lire</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500 py-4 text-center">
+                    Aucun épisode disponible pour cette saison.
+                  </p>
+                )}
               </div>
             )}
 

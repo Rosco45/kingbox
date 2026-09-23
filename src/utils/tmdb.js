@@ -145,3 +145,42 @@ export async function fetchTmdbDetails(apiKey, type, tmdbId) {
     return null;
   }
 }
+
+// 7. Récupérer la liste des saisons complètes d'une série / animé
+export async function fetchTvSeasonsInfo(apiKey, tmdbId) {
+  if (!apiKey || !tmdbId) return [];
+  try {
+    const res = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}?api_key=${apiKey}&language=fr-FR`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.seasons || []).filter(s => s.season_number > 0);
+  } catch (err) {
+    console.error('Erreur fetchTvSeasonsInfo:', err);
+    return [];
+  }
+}
+
+// 8. Récupérer tous les épisodes d'une saison spécifique avec titres, résumés et images
+export async function fetchSeasonEpisodes(apiKey, tmdbId, seasonNumber = 1) {
+  if (!apiKey || !tmdbId) return [];
+  try {
+    const res = await fetch(`${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}&language=fr-FR`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.episodes || []).map(ep => ({
+      number: ep.episode_number,
+      title: ep.name || `Épisode ${ep.episode_number}`,
+      duration: ep.runtime ? `${ep.runtime} min` : '45 min',
+      overview: ep.overview || 'Aucun résumé disponible pour cet épisode.',
+      still: ep.still_path ? getTmdbImageUrl(ep.still_path, 'w300') : null,
+      airDate: ep.air_date,
+      rating: ep.vote_average ? Number(ep.vote_average.toFixed(1)) : null,
+      season: seasonNumber,
+      videoUrl: ep.episode_number % 2 === 0 ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4" : "https://vjs.zencdn.net/v/oceans.mp4"
+    }));
+  } catch (err) {
+    console.error(`Erreur fetchSeasonEpisodes saison ${seasonNumber}:`, err);
+    return [];
+  }
+}
+
