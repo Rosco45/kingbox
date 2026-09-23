@@ -10,6 +10,8 @@ import FavoritesView from './components/FavoritesView';
 import DownloadsView from './components/DownloadsView';
 import DownloadModal from './components/DownloadModal';
 import SettingsModal from './components/SettingsModal';
+import AdultView from './components/AdultView';
+import AdultGateModal from './components/AdultGateModal';
 import BottomNav from './components/BottomNav';
 import Footer from './components/Footer';
 
@@ -21,15 +23,20 @@ import {
   fetchPopularSeries, 
   fetchPopularAnime 
 } from './utils/tmdb';
-import { Flame, Film, Tv, Sparkles, Database, Download } from 'lucide-react';
+import { isAdultSessionUnlocked, setAdultSessionUnlocked } from './utils/adultApi';
+import { Flame, Film, Tv, Sparkles, Database, Download, Lock } from 'lucide-react';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState('all'); // 'all' | 'movie' | 'tv' | 'anime' | 'favorites' | 'downloads'
+  const [currentTab, setCurrentTab] = useState('all'); // 'all' | 'movie' | 'tv' | 'anime' | 'favorites' | 'downloads' | 'adult'
   const [searchOpen, setSearchOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [playingMedia, setPlayingMedia] = useState(null);
   const [downloadTarget, setDownloadTarget] = useState(null); // { media, episode }
+
+  // Adult section protection state
+  const [isAdultUnlocked, setIsAdultUnlocked] = useState(() => isAdultSessionUnlocked());
+  const [showAdultGate, setShowAdultGate] = useState(false);
 
   // TMDB Data state
   const [tmdbApiKey, setTmdbApiKey] = useState(getTmdbApiKey());
@@ -209,13 +216,15 @@ export default function App() {
         onOpenSearch={() => setSearchOpen(true)}
         favoritesCount={favorites.length}
         downloadsCount={downloads.length}
+        isAdultUnlocked={isAdultUnlocked}
+        onOpenAdultGate={() => setShowAdultGate(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         installPrompt={installPrompt}
         onInstallClick={handleInstallClick}
       />
 
       {/* Optional TMDB Catalog Status Indicator Banner */}
-      {!tmdbApiKey && (
+      {!tmdbApiKey && currentTab !== 'adult' && (
         <div className="pt-20 pb-1 px-4 max-w-7xl mx-auto w-full">
           <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-800/80 border border-zinc-800 text-xs">
             <div className="flex items-center space-x-2.5">
@@ -251,6 +260,38 @@ export default function App() {
             onDeleteDownload={deleteDownload}
             onExplore={() => setCurrentTab('all')}
           />
+        ) : currentTab === 'adult' ? (
+          /* SECTION ADULTE 18+ (HENTAI & FILMS ADULTES) */
+          isAdultUnlocked ? (
+            <AdultView
+              onSelectMedia={setSelectedMedia}
+              onPlayMedia={setPlayingMedia}
+              onToggleFavorite={toggleFavorite}
+              favorites={favorites}
+              onLockSection={() => {
+                setIsAdultUnlocked(false);
+                setAdultSessionUnlocked(false);
+                setCurrentTab('all');
+              }}
+              onChangePin={() => setShowAdultGate(true)}
+            />
+          ) : (
+            <div className="pt-32 pb-24 px-4 text-center max-w-md mx-auto space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-red-600/10 border border-red-500/30 text-red-500 flex items-center justify-center mx-auto">
+                <Lock className="w-8 h-8" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Section Adulte Verrouillée</h2>
+              <p className="text-xs text-zinc-400">
+                Un code de sécurité à 4 chiffres est requis pour accéder aux animés et films réservés aux adultes.
+              </p>
+              <button
+                onClick={() => setShowAdultGate(true)}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-red-600/30 active:scale-95"
+              >
+                Déverrouiller avec le Code PIN
+              </button>
+            </div>
+          )
         ) : currentTab === 'all' ? (
           /* VUE ACCUEIL */
           <>
@@ -408,6 +449,8 @@ export default function App() {
         }}
         favoritesCount={favorites.length}
         downloadsCount={downloads.length}
+        isAdultUnlocked={isAdultUnlocked}
+        onOpenAdultGate={() => setShowAdultGate(true)}
       />
 
       {/* Search Overlay Modal */}
@@ -456,6 +499,16 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Adult Section Gate / PIN Modal */}
+      <AdultGateModal
+        isOpen={showAdultGate}
+        onClose={() => setShowAdultGate(false)}
+        onUnlockSuccess={() => {
+          setIsAdultUnlocked(true);
+          setCurrentTab('adult');
+        }}
+      />
 
       {/* Settings / TMDB Modal */}
       <SettingsModal

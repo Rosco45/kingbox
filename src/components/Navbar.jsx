@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Crown, Search, Heart, Film, Tv, Sparkles, Download, Menu, X, Settings, HardDrive } from 'lucide-react';
+import { Crown, Search, Heart, Film, Tv, Sparkles, Download, Menu, X, Settings, HardDrive, Lock, Unlock, ShieldAlert } from 'lucide-react';
 
 export default function Navbar({ 
   currentTab, 
@@ -7,6 +7,8 @@ export default function Navbar({
   onOpenSearch, 
   favoritesCount = 0,
   downloadsCount = 0,
+  isAdultUnlocked = false,
+  onOpenAdultGate,
   onOpenSettings,
   installPrompt,
   onInstallClick
@@ -28,8 +30,21 @@ export default function Navbar({
     { id: 'tv', label: 'Séries' },
     { id: 'anime', label: 'Animés' },
     { id: 'favorites', label: 'Ma Liste', count: favoritesCount },
-    { id: 'downloads', label: 'Téléchargements', count: downloadsCount, icon: Download }
+    { id: 'downloads', label: 'Téléchargements', count: downloadsCount },
+    { id: 'adult', label: 'Zone 18+', isAdult: true }
   ];
+
+  const handleNavClick = (item) => {
+    if (item.isAdult) {
+      if (isAdultUnlocked) {
+        setCurrentTab('adult');
+      } else {
+        onOpenAdultGate?.();
+      }
+    } else {
+      setCurrentTab(item.id);
+    }
+  };
 
   return (
     <header 
@@ -66,10 +81,35 @@ export default function Navbar({
           <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
             {navItems.map((item) => {
               const active = currentTab === item.id;
+
+              if (item.isAdult) {
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all relative flex items-center space-x-1.5 ${
+                      active
+                        ? 'bg-gradient-to-r from-red-600 to-purple-600 text-white shadow-md shadow-red-600/40'
+                        : isAdultUnlocked
+                        ? 'text-red-400 hover:text-white hover:bg-red-950/40 border border-red-900/60'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 border border-zinc-800'
+                    }`}
+                    title={isAdultUnlocked ? "Section 18+ Déverrouillée" : "Section 18+ (Code PIN requis)"}
+                  >
+                    {isAdultUnlocked ? (
+                      <Unlock className="w-3.5 h-3.5 text-red-400" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5 text-zinc-500" />
+                    )}
+                    <span>18+</span>
+                  </button>
+                );
+              }
+
               return (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentTab(item.id)}
+                  onClick={() => handleNavClick(item)}
                   className={`px-3 py-1.5 rounded-full text-xs lg:text-sm font-medium transition-all relative flex items-center space-x-1 ${
                     active
                       ? 'bg-red-600 text-white shadow-md shadow-red-600/30 font-semibold'
@@ -139,16 +179,23 @@ export default function Navbar({
             <button
               key={item.id}
               onClick={() => {
-                setCurrentTab(item.id);
+                handleNavClick(item);
                 setMobileMenuOpen(false);
               }}
               className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between ${
                 currentTab === item.id
                   ? 'bg-red-600 text-white font-semibold'
+                  : item.isAdult
+                  ? 'text-red-400 bg-red-950/20 border border-red-900/40 font-semibold'
                   : 'text-zinc-300 hover:bg-zinc-800/80'
               }`}
             >
-              <span>{item.label}</span>
+              <div className="flex items-center space-x-2">
+                {item.isAdult && (
+                  isAdultUnlocked ? <Unlock className="w-4 h-4 text-red-400" /> : <Lock className="w-4 h-4 text-zinc-500" />
+                )}
+                <span>{item.label}</span>
+              </div>
               {item.count !== undefined && item.count > 0 && (
                 <span className="px-2 py-0.5 text-xs bg-zinc-900 text-white rounded-full">
                   {item.count}
