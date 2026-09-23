@@ -31,21 +31,21 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     { id: 'ar', label: 'العربية (AR)', lang: 'ar' }
   ];
 
-  // Embed streaming URL with anti-ad parameters
+  // Embed streaming URLs with multi-sources
   const getEmbedUrl = (serverIndex) => {
     switch (serverIndex) {
-      case 1: // AutoEmbed
-        return isTv
-          ? `https://autoembed.co/tv/tmdb/${tmdbId}-${seasonNum}-${episodeNum}`
-          : `https://autoembed.co/movie/tmdb/${tmdbId}`;
-      case 2: // MultiEmbed (Supporte multi-audio et sous-titres)
+      case 1: // MultiEmbed (Multi-langues VF/VOSTFR)
         return isTv
           ? `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1&s=${seasonNum}&e=${episodeNum}`
           : `https://multiembed.mov/?video_id=${tmdbId}&tmdb=1`;
-      case 3: // 2Embed
+      case 2: // VidSrc
         return isTv
-          ? `https://www.2embed.cc/embedtv/${tmdbId}&s=${seasonNum}&e=${episodeNum}`
-          : `https://www.2embed.cc/embed/${tmdbId}`;
+          ? `https://vidsrc.to/embed/tv/${tmdbId}/${seasonNum}/${episodeNum}`
+          : `https://vidsrc.to/embed/movie/${tmdbId}`;
+      case 3: // AutoEmbed
+        return isTv
+          ? `https://autoembed.co/tv/tmdb/${tmdbId}-${seasonNum}-${episodeNum}`
+          : `https://autoembed.co/movie/tmdb/${tmdbId}`;
       default:
         return null;
     }
@@ -255,16 +255,14 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
 
       {/* PLAYER CONTENT */}
       {currentServer <= 3 ? (
-        /* EMBED PLAYER WITH ANTI-AD SANDBOX SHIELD */
+        /* EMBED PLAYER */
         <div className="w-full h-full pt-16 flex items-center justify-center bg-black relative">
           <iframe
             key={`srv-${currentServer}-${tmdbId}-${seasonNum}-${episodeNum}`}
             src={getEmbedUrl(currentServer)}
             title={media.title}
             className="w-full h-full border-0"
-            // BOUCLIER ANTI-PUB : Pas de popups, pas de redirections vers d'autres pages
-            sandbox="allow-forms allow-scripts allow-same-origin allow-presentation"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
             onLoad={() => setIsLoading(false)}
           />
