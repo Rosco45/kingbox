@@ -10,6 +10,7 @@ import {
   resolveHosterEmbedUrl, 
   resolveAnimeIds,
   getSyncAnimeIds,
+  fetchDynamicFranimeLinks,
   createSubtitleBlobUrl 
 } from '../utils/franimeHosters';
 
@@ -33,6 +34,8 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
 
   // Identifiants Anime (AniList / MAL) résolus instantanément (0ms pour Naruto Shippuden & top animés)
   const [resolvedIds, setResolvedIds] = useState(() => getSyncAnimeIds(media));
+  // Liens Vraie VF / VOSTFR résolus dynamiquement depuis le catalogue officiel FRAnime (2553 animés)
+  const [dynamicFranimeHosters, setDynamicFranimeHosters] = useState(null);
 
   // Bouton Bouclier Sandbox (Style FRAnime : désactivé par défaut au lancement pour éviter tout écran noir)
   const [isSandboxEnabled, setIsSandboxEnabled] = useState(false);
@@ -88,6 +91,27 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     }
     return () => { mounted = false; };
   }, [media, isAnime]);
+
+  // Résoudre dynamiquement les vrais liens VF / VOSTFR du catalogue officiel FRAnime (2553 animés)
+  useEffect(() => {
+    let mounted = true;
+    setDynamicFranimeHosters(null);
+    if (media && isAnime && selectedLang !== 'vo') {
+      fetchDynamicFranimeLinks({
+        tmdbId,
+        title: media.title,
+        originalTitle: media.originalTitle,
+        season: activeSeason,
+        episode: activeEpisodeNum,
+        lang: selectedLang
+      }).then((hosters) => {
+        if (mounted && hosters) {
+          setDynamicFranimeHosters(hosters);
+        }
+      });
+    }
+    return () => { mounted = false; };
+  }, [media, isAnime, tmdbId, activeSeason, activeEpisodeNum, selectedLang]);
 
   // Générer le fichier WebVTT de sous-titres pour le lecteur HTML5 Direct HD
   useEffect(() => {
@@ -165,18 +189,21 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     isAdult: media?.isAdult,
     season: activeSeason,
     episode: activeEpisodeNum,
-    customHosters: media?.hosters
+    customHosters: media?.hosters,
+    dynamicFranimeHosters
   });
 
   // Seuls les hébergeurs compatibles Sandbox reçoivent l'attribut sandbox HTML
   const effectiveSandbox = isSandboxEnabled && currentHosterObj.supportsSandbox;
 
-  // Flux vidéo direct HD (alterne selon la langue ou l'épisode pour un rendu réactif)
-  const directVideoUrl = selectedLang === 'vostfr' || activeEpisodeNum % 2 === 0
-    ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4"
-    : (media?.videoUrl && !media.videoUrl.includes('commondatastorage')
-        ? media.videoUrl
-        : "https://vjs.zencdn.net/v/oceans.mp4");
+  // Flux vidéo direct HD (utilise en priorité le vrai MP4 VF/VOSTFR extrait de Sendvid FRAnime s'il est disponible)
+  const directVideoUrl = dynamicFranimeHosters?.directMp4
+    ? dynamicFranimeHosters.directMp4
+    : (selectedLang === 'vostfr' || activeEpisodeNum % 2 === 0
+        ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4"
+        : (media?.videoUrl && !media.videoUrl.includes('commondatastorage')
+            ? media.videoUrl
+            : "https://vjs.zencdn.net/v/oceans.mp4"));
 
   const handleLanguageSwitch = (langId) => {
     setSelectedLang(langId);
