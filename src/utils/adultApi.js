@@ -39,6 +39,7 @@ export async function fetchAdultAnimeList({ page = 1, perPage = 24, sort = 'POPU
         }
         media(isAdult: true, type: ANIME, sort: $sort, search: $search) {
           id
+          idMal
           title {
             english
             romaji
@@ -95,7 +96,9 @@ export async function fetchAdultAnimeList({ page = 1, perPage = 24, sort = 'POPU
 
       return {
         id: `adult-al-${item.id}`,
-        tmdbId: item.id,
+        anilistId: item.id,
+        malId: item.idMal || item.id,
+        tmdbId: null,
         title: item.title.english || item.title.romaji || 'Animé 18+',
         originalTitle: item.title.romaji || item.title.native || '',
         type: 'anime',
@@ -153,6 +156,9 @@ function getFallbackAdultList() {
   return [
     {
       id: "adult-fb-1",
+      anilistId: 113425,
+      malId: 40750,
+      tmdbId: 96902,
       title: "Redo of Healer (Version intégrale)",
       originalTitle: "Kaifuku Jutsushi no Yarinaoshi",
       type: "anime",
@@ -173,6 +179,9 @@ function getFallbackAdultList() {
     },
     {
       id: "adult-fb-2",
+      anilistId: 110270,
+      malId: 40010,
+      tmdbId: 95484,
       title: "Interspecies Reviewers",
       originalTitle: "Ishuzoku Reviewers",
       type: "anime",

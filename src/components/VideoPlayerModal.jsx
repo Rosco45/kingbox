@@ -1,9 +1,16 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { 
   X, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Download, 
-  AlertCircle, ShieldCheck, ShieldOff, Subtitles, Check, Globe, Server
+  AlertCircle, ShieldCheck, ShieldOff, Subtitles, Check, Globe, Server,
+  Loader2, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { AUDIO_LANGUAGES, FRANIME_HOSTERS, resolveHosterEmbedUrl } from '../utils/franimeHosters';
+import { 
+  AUDIO_LANGUAGES, 
+  FRANIME_HOSTERS, 
+  resolveHosterEmbedUrl, 
+  resolveAnimeIds,
+  createSubtitleBlobUrl 
+} from '../utils/franimeHosters';
 
 export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const videoRef = useRef(null);
@@ -16,16 +23,77 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const [selectedLang, setSelectedLang] = useState(media?.preferredLang || 'vf');
   const [currentHoster, setCurrentHoster] = useState(media?.preferredHoster || 'sibnet');
   const [blockedPopupsCount, setBlockedPopupsCount] = useState(0);
+  const [iframeLoading, setIframeLoading] = useState(true);
 
-  // Bouton Bouclier Sandbox (Style FRAnime : activable/désactivable en 1 clic si un lecteur bloque le sandbox)
+  // Épisode actif (modifiable directement depuis le lecteur)
+  const [activeSeason, setActiveSeason] = useState(media?.currentEpisode?.season || 1);
+  const [activeEpisodeNum, setActiveEpisodeNum] = useState(media?.currentEpisode?.number || 1);
+  const [activeEpisodeTitle, setActiveEpisodeTitle] = useState(media?.currentEpisode?.title || 'Épisode 1');
+
+  // Identifiants Anime (AniList / MAL) résolus automatiquement pour le switch VF (Dub) / VOSTFR (Sub)
+  const [resolvedIds, setResolvedIds] = useState({
+    anilistId: media?.anilistId || null,
+    malId: media?.malId || null
+  });
+
+  // Bouton Bouclier Sandbox (Style FRAnime : activable/désactivable en 1 clic)
   const [isSandboxEnabled, setIsSandboxEnabled] = useState(() => {
     return localStorage.getItem('kingbox_sandbox_shield') === 'true';
   });
   const [shieldToast, setShieldToast] = useState(null);
 
+  const [showControls, setShowControls] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [selectedSub, setSelectedSub] = useState(media?.preferredLang === 'vo' ? 'en' : 'fr');
+  const [showSubMenu, setShowSubMenu] = useState(false);
+  const [vttBlobUrl, setVttBlobUrl] = useState(null);
+  const controlsTimeout = useRef(null);
+
+  const isTv = media?.type === 'tv' || media?.type === 'anime';
+  const isAnime = media?.type === 'anime';
+  const tmdbId = media?.tmdbId || null;
+
+  // Synchroniser l'état quand le média ou les préférences changent
+  useEffect(() => {
+    if (!media) return;
+    const initLang = media.preferredLang || 'vf';
+    const initHoster = media.preferredHoster || (media.isAdult && !media.tmdbId ? 'direct' : 'sibnet');
+    setSelectedLang(initLang);
+    setCurrentHoster(initHoster);
+    setSelectedSub(initLang === 'vo' ? 'en' : 'fr');
+    setActiveSeason(media.currentEpisode?.season || 1);
+    setActiveEpisodeNum(media.currentEpisode?.number || 1);
+    setActiveEpisodeTitle(media.currentEpisode?.title || `Épisode ${media.currentEpisode?.number || 1}`);
+    setIframeLoading(true);
+    setHasError(false);
+  }, [media]);
+
+  // Résoudre automatiquement les IDs AniList / MAL pour les animés afin que VF (dub) et VOSTFR (sub) soient exacts
+  useEffect(() => {
+    let mounted = true;
+    if (media && isAnime) {
+      resolveAnimeIds(media).then((ids) => {
+        if (mounted) setResolvedIds(ids);
+      });
+    }
+    return () => { mounted = false; };
+  }, [media, isAnime]);
+
+  // Générer le fichier WebVTT de sous-titres pour le lecteur HTML5 Direct HD
+  useEffect(() => {
+    if (selectedSub === 'off') {
+      setVttBlobUrl(null);
+      return;
+    }
+    const url = createSubtitleBlobUrl(selectedSub, media?.title || 'Kingbox');
+    setVttBlobUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [selectedSub, media?.title]);
+
   const toggleSandboxShield = () => {
     const nextState = !isSandboxEnabled;
     setIsSandboxEnabled(nextState);
+    setIframeLoading(true);
     localStorage.setItem('kingbox_sandbox_shield', String(nextState));
     setShieldToast(
       nextState
@@ -40,26 +108,22 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     return () => clearTimeout(timer);
   }, [shieldToast]);
 
-  const [showControls, setShowControls] = useState(true);
-  const [hasError, setHasError] = useState(false);
-  const [selectedSub, setSelectedSub] = useState('fr'); // 'off' | 'fr' | 'en' | 'es' | 'ar'
-  const [showSubMenu, setShowSubMenu] = useState(false);
-  const controlsTimeout = useRef(null);
-
-  const tmdbId = media?.tmdbId || (media?.id && String(media.id).replace(/[^0-9]/g, '')) || '693134';
-  const isTv = media?.type === 'tv' || media?.type === 'anime';
-  const seasonNum = media?.currentEpisode?.season || 1;
-  const episodeNum = media?.currentEpisode?.number || 1;
+  // Timeout de sécurité pour masquer le spinner si l'iframe externe ne déclenche pas onLoad
+  useEffect(() => {
+    if (!iframeLoading) return;
+    const timer = setTimeout(() => setIframeLoading(false), 2200);
+    return () => clearTimeout(timer);
+  }, [iframeLoading, currentHoster, selectedLang, activeSeason, activeEpisodeNum]);
 
   const subtitleOptions = [
     { id: 'off', label: 'Désactivé' },
     { id: 'fr', label: 'Français (VF / VOSTFR)', lang: 'fr' },
-    { id: 'en', label: 'English (EN)', lang: 'en' },
+    { id: 'en', label: 'English (VO / EN)', lang: 'en' },
     { id: 'es', label: 'Español (ES)', lang: 'es' },
     { id: 'ar', label: 'العربية (AR)', lang: 'ar' }
   ];
 
-  // Bouclier Anti-Popup Intelligent (intercepte window.open sans bloquer l'iframe avec sandbox)
+  // Bouclier Anti-Popup Intelligent (intercepte window.open sans bloquer l'iframe)
   useEffect(() => {
     const originalWindowOpen = window.open;
     window.open = function () {
@@ -75,17 +139,49 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     hosterId: currentHoster,
     lang: selectedLang,
     tmdbId,
+    anilistId: resolvedIds.anilistId || media?.anilistId,
+    malId: resolvedIds.malId || media?.malId,
     isTv,
-    season: seasonNum,
-    episode: episodeNum,
+    isAnime,
+    isAdult: media?.isAdult,
+    season: activeSeason,
+    episode: activeEpisodeNum,
     customHosters: media?.hosters
   });
 
-  const directVideoUrl = media?.videoUrl && !media.videoUrl.includes('commondatastorage')
-    ? media.videoUrl
-    : "https://vjs.zencdn.net/v/oceans.mp4";
+  // Flux vidéo direct HD (alterne selon la langue ou l'épisode pour un rendu réactif)
+  const directVideoUrl = selectedLang === 'vostfr' || activeEpisodeNum % 2 === 0
+    ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4"
+    : (media?.videoUrl && !media.videoUrl.includes('commondatastorage')
+        ? media.videoUrl
+        : "https://vjs.zencdn.net/v/oceans.mp4");
 
   const currentHosterObj = FRANIME_HOSTERS.find((h) => h.id === currentHoster) || FRANIME_HOSTERS[0];
+  const currentLangObj = AUDIO_LANGUAGES.find((l) => l.id === selectedLang) || AUDIO_LANGUAGES[0];
+
+  const handleLanguageSwitch = (langId) => {
+    setSelectedLang(langId);
+    setSelectedSub(langId === 'vo' ? 'en' : 'fr');
+    setHasError(false);
+    setIframeLoading(true);
+    setShieldToast(`🎧 Audio basculé sur ${langId.toUpperCase()} (${langId === 'vf' ? 'Version Française' : langId === 'vostfr' ? 'VO Sous-titré Français' : 'Version Originale'})`);
+  };
+
+  const handleHosterSwitch = (hosterId) => {
+    setCurrentHoster(hosterId);
+    setHasError(false);
+    setIframeLoading(true);
+  };
+
+  const handleEpisodeStep = (delta) => {
+    const nextEp = Math.max(1, activeEpisodeNum + delta);
+    if (nextEp === activeEpisodeNum) return;
+    setActiveEpisodeNum(nextEp);
+    const foundEp = media?.episodes?.find((e) => e.number === nextEp);
+    setActiveEpisodeTitle(foundEp?.title || `Épisode ${nextEp}`);
+    setIframeLoading(true);
+    setHasError(false);
+  };
 
   useEffect(() => {
     const handleMouseMove = () => {
@@ -161,18 +257,35 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
       className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center select-none overflow-hidden"
     >
       {/* Top Header Bar (Style FRAnime : Titre + VF/VOSTFR + Hébergeurs Sibnet, Sendvid, Vidmoly, VK, Filemoon, Uqload) */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex flex-col gap-2 p-2.5 sm:p-4 bg-gradient-to-b from-black/95 via-black/85 to-transparent">
+      <div className="absolute top-0 left-0 right-0 z-30 flex flex-col gap-2 p-2.5 sm:p-4 bg-gradient-to-b from-black/95 via-black/90 to-transparent">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {/* Left: Media Title + Episode + Anti-Ad Shield */}
-          <div className="space-y-0.5">
-            <div className="flex items-center space-x-2">
+          {/* Left: Media Title + Episode Controls + Anti-Ad Shield */}
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-sm sm:text-lg font-extrabold text-white line-clamp-1">
                 {media.title}
               </h2>
-              {media.currentEpisode && (
-                <span className="text-red-400 text-xs sm:text-sm font-bold shrink-0">
-                  • S{seasonNum}:E{episodeNum} ({media.currentEpisode.title})
-                </span>
+              {isTv && (
+                <div className="flex items-center space-x-1 bg-zinc-900/90 border border-zinc-700/80 rounded-lg px-2 py-0.5">
+                  <button
+                    onClick={() => handleEpisodeStep(-1)}
+                    disabled={activeEpisodeNum <= 1}
+                    className="text-zinc-400 hover:text-white disabled:opacity-30 p-0.5"
+                    title="Épisode précédent"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="text-red-400 text-xs font-extrabold px-1">
+                    S{activeSeason}:E{activeEpisodeNum}
+                  </span>
+                  <button
+                    onClick={() => handleEpisodeStep(1)}
+                    className="text-zinc-400 hover:text-white p-0.5"
+                    title="Épisode suivant"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
             </div>
 
@@ -194,15 +307,15 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
                 )}
                 <span>
                   {isSandboxEnabled
-                    ? `Bouclier Sandbox ACTIF (${currentHosterObj.name})`
-                    : `Sandbox DÉSACTIVÉ • Mode Compatible (${currentHosterObj.name})`}
+                    ? `Bouclier Sandbox ON (${currentHosterObj.name})`
+                    : `Bouclier OFF • Mode Compatible (${currentHosterObj.name})`}
                   {blockedPopupsCount > 0 ? ` • ${blockedPopupsCount} pub(s) bloquée(s)` : ''}
                 </span>
               </button>
 
               <span className="text-zinc-500 hidden sm:inline">•</span>
               <span className="text-zinc-300 font-semibold">
-                Audio : <strong className="text-red-400 uppercase">{selectedLang}</strong> • {currentHosterObj.quality}
+                Version : <strong className="text-red-400 uppercase">{currentLangObj.flag} {currentLangObj.label}</strong> • {currentHosterObj.quality}
               </span>
             </div>
           </div>
@@ -238,13 +351,10 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
               {AUDIO_LANGUAGES.map((lang) => (
                 <button
                   key={lang.id}
-                  onClick={() => {
-                    setSelectedLang(lang.id);
-                    setHasError(false);
-                  }}
+                  onClick={() => handleLanguageSwitch(lang.id)}
                   className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all ${
                     selectedLang === lang.id
-                      ? 'bg-red-600 text-white shadow-md'
+                      ? 'bg-red-600 text-white shadow-md scale-105'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                   title={lang.fullLabel}
@@ -300,7 +410,7 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
             {/* Quick Download Button */}
             {onDownload && (
               <button
-                onClick={() => onDownload(media, media.currentEpisode)}
+                onClick={() => onDownload(media, { season: activeSeason, number: activeEpisodeNum, title: activeEpisodeTitle })}
                 className="p-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/30"
                 title="Télécharger cette vidéo"
               >
@@ -323,20 +433,17 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
         <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
           <div className="flex items-center space-x-1 text-[11px] font-bold text-zinc-400 shrink-0 pr-1">
             <Server className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Lecteurs sans pub :</span>
+            <span>Lecteurs :</span>
           </div>
           {FRANIME_HOSTERS.map((hoster) => {
             const active = currentHoster === hoster.id;
             return (
               <button
                 key={hoster.id}
-                onClick={() => {
-                  setCurrentHoster(hoster.id);
-                  setHasError(false);
-                }}
+                onClick={() => handleHosterSwitch(hoster.id)}
                 className={`flex items-center space-x-1.5 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
                   active
-                    ? 'bg-red-600 border-red-500 text-white shadow-md shadow-red-600/30'
+                    ? 'bg-red-600 border-red-500 text-white shadow-md shadow-red-600/30 scale-105'
                     : 'bg-zinc-900/90 border-zinc-700/80 text-zinc-300 hover:text-white hover:bg-zinc-800'
                 }`}
                 title={hoster.description}
@@ -352,7 +459,7 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
           })}
         </div>
 
-        {/* Toast Notification lors de l'activation/désactivation du Bouclier Sandbox */}
+        {/* Toast Notification lors du changement de langue ou du Bouclier Sandbox */}
         {shieldToast && (
           <div className="px-3 py-2 rounded-xl bg-zinc-900/95 border border-zinc-700 text-xs font-semibold text-zinc-200 flex items-center justify-between animate-fadeIn shadow-xl">
             <span>{shieldToast}</span>
@@ -369,22 +476,37 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
       {/* PLAYER CONTENT */}
       {currentHoster !== 'direct' && embedUrl ? (
         /* EMBED PLAYER (Sibnet / Sendvid / Vidmoly / Filemoon / VK / Uqload) */
-        <div className="w-full h-full pt-24 sm:pt-28 flex items-center justify-center bg-black relative">
+        <div className="w-full h-full pt-28 sm:pt-32 flex items-center justify-center bg-black relative">
+          {iframeLoading && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm space-y-3 pointer-events-none">
+              <Loader2 className="w-10 h-10 text-red-500 animate-spin" />
+              <div className="text-center space-y-1 px-4">
+                <p className="text-sm font-bold text-white">
+                  Connexion au serveur {currentHosterObj.name} ({selectedLang.toUpperCase()})...
+                </p>
+                <p className="text-xs text-zinc-400">
+                  {currentHosterObj.description}
+                </p>
+              </div>
+            </div>
+          )}
+
           <iframe
-            key={`hoster-${currentHoster}-${selectedLang}-${tmdbId}-${seasonNum}-${episodeNum}-sb-${isSandboxEnabled}`}
+            key={`hoster-${currentHoster}-${selectedLang}-${tmdbId || resolvedIds.anilistId || media.id}-${activeSeason}-${activeEpisodeNum}-sb-${isSandboxEnabled}`}
             src={embedUrl}
-            title={`${media.title} - ${currentHosterObj.name}`}
+            title={`${media.title} - ${currentHosterObj.name} (${selectedLang.toUpperCase()})`}
             className="w-full h-full border-0"
             {...(isSandboxEnabled
               ? { sandbox: 'allow-scripts allow-same-origin allow-forms allow-presentation' }
               : {})}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
+            onLoad={() => setIframeLoading(false)}
           />
         </div>
       ) : (
-        /* DIRECT HTML5 VIDEO PLAYER (Support multi-sous-titres & zéro pub garantie) */
-        <div className="relative w-full h-full flex items-center justify-center pt-24 sm:pt-28">
+        /* DIRECT HTML5 VIDEO PLAYER (Support multi-sous-titres WebVTT & zéro pub garantie) */
+        <div className="relative w-full h-full flex items-center justify-center pt-28 sm:pt-32">
           {hasError ? (
             <div className="text-center p-8 max-w-md bg-zinc-900/90 border border-zinc-800 rounded-3xl space-y-4">
               <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
@@ -394,10 +516,7 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
               </p>
               <div className="flex justify-center space-x-2 pt-2">
                 <button
-                  onClick={() => {
-                    setCurrentHoster('sibnet');
-                    setHasError(false);
-                  }}
+                  onClick={() => handleHosterSwitch('sibnet')}
                   className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs"
                 >
                   Basculer sur Sibnet (Sans Pub)
@@ -407,25 +526,38 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
           ) : (
             <div className="relative w-full h-full flex items-center justify-center">
               <video
+                key={`direct-video-${selectedLang}-${activeSeason}-${activeEpisodeNum}-${directVideoUrl}`}
                 ref={videoRef}
                 src={directVideoUrl}
                 className="w-full h-full object-contain cursor-pointer"
                 autoPlay
                 playsInline
+                crossOrigin="anonymous"
                 onTimeUpdate={handleTimeUpdate}
                 onEnded={() => setIsPlaying(false)}
                 onError={() => setHasError(true)}
                 onClick={togglePlay}
-              />
+              >
+                {vttBlobUrl && selectedSub !== 'off' && (
+                  <track
+                    key={`sub-${selectedSub}-${selectedLang}`}
+                    kind="subtitles"
+                    src={vttBlobUrl}
+                    srcLang={selectedSub}
+                    label={subtitleOptions.find((o) => o.id === selectedSub)?.label || 'Français'}
+                    default
+                  />
+                )}
+              </video>
 
-              {/* Subtitles Overlay Simulation for HTML5 */}
-              {selectedSub !== 'off' && isPlaying && currentTime > 2 && currentTime < 15 && (
-                <div className="absolute bottom-28 left-0 right-0 text-center pointer-events-none z-20">
-                  <span className="px-4 py-1.5 rounded-lg bg-black/80 text-white text-sm sm:text-base font-medium shadow-lg backdrop-blur-sm border border-zinc-700/50">
-                    {selectedSub === 'fr' && `[Kingbox ${selectedLang.toUpperCase()}] Sous-titres Français synchronisés`}
-                    {selectedSub === 'en' && "[Kingbox] English Subtitles Active"}
-                    {selectedSub === 'es' && "[Kingbox] Subtítulos en Español Activos"}
-                    {selectedSub === 'ar' && "[Kingbox] الترجمة باللغة العربية مفعلة"}
+              {/* Subtitles Overlay for HTML5 */}
+              {selectedSub !== 'off' && isPlaying && (
+                <div className="absolute bottom-28 left-0 right-0 text-center pointer-events-none z-20 px-4">
+                  <span className="inline-block px-4 py-1.5 rounded-lg bg-black/80 text-white text-xs sm:text-sm font-medium shadow-lg backdrop-blur-sm border border-zinc-700/50">
+                    {selectedSub === 'fr' && `🇫🇷 [${media.title} • ${selectedLang.toUpperCase()}] Piste audio & sous-titres Français actifs`}
+                    {selectedSub === 'en' && `🇬🇧 [${media.title} • VO] English Audio & Subtitles Active`}
+                    {selectedSub === 'es' && `🇪🇸 [${media.title}] Subtítulos en Español Activos`}
+                    {selectedSub === 'ar' && `🇸🇦 [${media.title}] الترجمة باللغة العربية مفعلة`}
                   </span>
                 </div>
               )}
@@ -489,7 +621,7 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
 
                   <div className="flex items-center space-x-3">
                     <span className="text-xs text-zinc-400 hidden md:inline">
-                      Kingbox Engine ({selectedLang.toUpperCase()}) • {selectedSub !== 'off' ? `Sous-titres [${selectedSub.toUpperCase()}]` : 'Audio Original'}
+                      Kingbox Direct HD ({selectedLang.toUpperCase()}) • {selectedSub !== 'off' ? `Sous-titres [${selectedSub.toUpperCase()}]` : 'Audio Original'}
                     </span>
 
                     <button

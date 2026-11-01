@@ -3,7 +3,9 @@ export const VERIFIED_STREAM_2 = "https://media.w3.org/2010/05/sintel/trailer_hd
 
 export const FEATURED_HERO = {
   id: "hero-1",
-  tmdbId: 114479, // Solo Leveling TMDB ID
+  tmdbId: 127532, // Solo Leveling Real TMDB ID
+  anilistId: 151807,
+  malId: 52299,
   title: "Solo Leveling: ReAwakening",
   originalTitle: "Ore dake Level Up na Ken",
   type: "anime",
@@ -215,6 +217,8 @@ export const MEDIA_LIST = [
   {
     id: "anime-1",
     tmdbId: 85937, // Demon Slayer
+    anilistId: 101922,
+    malId: 38000,
     title: "Demon Slayer: Kimetsu no Yaiba",
     type: "anime",
     rating: 8.7,
@@ -238,6 +242,8 @@ export const MEDIA_LIST = [
   {
     id: "anime-2",
     tmdbId: 95479, // Jujutsu Kaisen
+    anilistId: 113415,
+    malId: 40748,
     title: "Jujutsu Kaisen",
     type: "anime",
     rating: 8.6,
@@ -260,6 +266,8 @@ export const MEDIA_LIST = [
   {
     id: "anime-3",
     tmdbId: 1429, // Attack on Titan
+    anilistId: 16498,
+    malId: 16498,
     title: "L'Attaque des Titans (Shingeki no Kyojin)",
     type: "anime",
     rating: 9.1,
@@ -282,6 +290,8 @@ export const MEDIA_LIST = [
   {
     id: "anime-4",
     tmdbId: 37854, // One Piece
+    anilistId: 21,
+    malId: 21,
     title: "One Piece (Saga Egghead)",
     type: "anime",
     rating: 8.9,
