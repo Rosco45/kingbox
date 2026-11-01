@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { 
   X, Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Download, 
-  AlertCircle, ShieldCheck, Subtitles, Check, Globe, Server
+  AlertCircle, ShieldCheck, ShieldOff, Subtitles, Check, Globe, Server
 } from 'lucide-react';
 import { AUDIO_LANGUAGES, FRANIME_HOSTERS, resolveHosterEmbedUrl } from '../utils/franimeHosters';
 
@@ -16,6 +16,29 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const [selectedLang, setSelectedLang] = useState(media?.preferredLang || 'vf');
   const [currentHoster, setCurrentHoster] = useState(media?.preferredHoster || 'sibnet');
   const [blockedPopupsCount, setBlockedPopupsCount] = useState(0);
+
+  // Bouton Bouclier Sandbox (Style FRAnime : activable/désactivable en 1 clic si un lecteur bloque le sandbox)
+  const [isSandboxEnabled, setIsSandboxEnabled] = useState(() => {
+    return localStorage.getItem('kingbox_sandbox_shield') === 'true';
+  });
+  const [shieldToast, setShieldToast] = useState(null);
+
+  const toggleSandboxShield = () => {
+    const nextState = !isSandboxEnabled;
+    setIsSandboxEnabled(nextState);
+    localStorage.setItem('kingbox_sandbox_shield', String(nextState));
+    setShieldToast(
+      nextState
+        ? '🛡️ Bouclier Sandbox ACTIVÉ : Protection stricte contre les redirections (désactivez-le si le lecteur affiche "Playback blocked").'
+        : '🔓 Bouclier Sandbox DÉSACTIVÉ : Mode compatibilité maximale pour tous les lecteurs.'
+    );
+  };
+
+  useEffect(() => {
+    if (!shieldToast) return;
+    const timer = setTimeout(() => setShieldToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [shieldToast]);
 
   const [showControls, setShowControls] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -154,14 +177,28 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs">
-              {/* Anti-Ad Shield Status Badge */}
-              <div className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+              {/* Clickable Anti-Ad / Sandbox Shield Status Badge */}
+              <button
+                onClick={toggleSandboxShield}
+                className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full border font-bold transition-all cursor-pointer ${
+                  isSandboxEnabled
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                    : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
+                }`}
+                title="Cliquez pour activer ou désactiver le mode protégé (Sandbox) si un lecteur est bloqué"
+              >
+                {isSandboxEnabled ? (
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <ShieldOff className="w-3.5 h-3.5 text-amber-400" />
+                )}
                 <span>
-                  Hébergeur {currentHosterObj.name} ({currentHosterObj.badge})
+                  {isSandboxEnabled
+                    ? `Bouclier Sandbox ACTIF (${currentHosterObj.name})`
+                    : `Sandbox DÉSACTIVÉ • Mode Compatible (${currentHosterObj.name})`}
                   {blockedPopupsCount > 0 ? ` • ${blockedPopupsCount} pub(s) bloquée(s)` : ''}
                 </span>
-              </div>
+              </button>
 
               <span className="text-zinc-500 hidden sm:inline">•</span>
               <span className="text-zinc-300 font-semibold">
@@ -170,8 +207,32 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
             </div>
           </div>
 
-          {/* Right Controls: VF/VOSTFR Switcher + Subtitles + Download + Close */}
+          {/* Right Controls: Shield Toggle Button (FRAnime style) + VF/VOSTFR Switcher + Subtitles + Download + Close */}
           <div className="flex items-center space-x-2">
+            {/* Bouton Bouclier (Style FRAnime : Activer / Désactiver Sandbox) */}
+            <button
+              onClick={toggleSandboxShield}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border shadow-md ${
+                isSandboxEnabled
+                  ? 'bg-emerald-600/25 border-emerald-500 text-emerald-300 hover:bg-emerald-600/35 shadow-emerald-950/50'
+                  : 'bg-amber-600/20 border-amber-500/70 text-amber-300 hover:bg-amber-600/30'
+              }`}
+              title={
+                isSandboxEnabled
+                  ? "Bouclier Sandbox ACTIVÉ : Cliquez pour le désactiver si le lecteur affiche 'Playback blocked / sandboxed frame'"
+                  : "Bouclier Sandbox DÉSACTIVÉ (Mode compatible) : Cliquez pour activer le blocage strict par Sandbox"
+              }
+            >
+              {isSandboxEnabled ? (
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <ShieldOff className="w-4 h-4 text-amber-400" />
+              )}
+              <span className="hidden sm:inline">
+                {isSandboxEnabled ? 'Bouclier ON' : 'Bouclier OFF'}
+              </span>
+            </button>
+
             {/* Audio Language Selector (VF / VOSTFR / VO) */}
             <div className="flex items-center bg-zinc-900/95 p-1 rounded-xl border border-zinc-700/80 text-xs">
               {AUDIO_LANGUAGES.map((lang) => (
@@ -290,6 +351,19 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
             );
           })}
         </div>
+
+        {/* Toast Notification lors de l'activation/désactivation du Bouclier Sandbox */}
+        {shieldToast && (
+          <div className="px-3 py-2 rounded-xl bg-zinc-900/95 border border-zinc-700 text-xs font-semibold text-zinc-200 flex items-center justify-between animate-fadeIn shadow-xl">
+            <span>{shieldToast}</span>
+            <button
+              onClick={() => setShieldToast(null)}
+              className="text-zinc-400 hover:text-white ml-3 text-[11px] font-bold"
+            >
+              OK
+            </button>
+          </div>
+        )}
       </div>
 
       {/* PLAYER CONTENT */}
@@ -297,10 +371,13 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
         /* EMBED PLAYER (Sibnet / Sendvid / Vidmoly / Filemoon / VK / Uqload) */
         <div className="w-full h-full pt-24 sm:pt-28 flex items-center justify-center bg-black relative">
           <iframe
-            key={`hoster-${currentHoster}-${selectedLang}-${tmdbId}-${seasonNum}-${episodeNum}`}
+            key={`hoster-${currentHoster}-${selectedLang}-${tmdbId}-${seasonNum}-${episodeNum}-sb-${isSandboxEnabled}`}
             src={embedUrl}
             title={`${media.title} - ${currentHosterObj.name}`}
             className="w-full h-full border-0"
+            {...(isSandboxEnabled
+              ? { sandbox: 'allow-scripts allow-same-origin allow-forms allow-presentation' }
+              : {})}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowFullScreen
           />
