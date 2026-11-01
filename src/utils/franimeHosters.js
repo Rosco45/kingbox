@@ -302,9 +302,74 @@ export const KNOWN_ANIME_IDS = {
 // Cache mémoire pour la résolution automatique AniList / MAL ID et FRAnime VF
 const animeIdCache = new Map();
 const dynamicVfCache = new Map();
+let clientFranimeCatalogCache = null;
+let clientFranimeCatalogPromise = null;
+
+const TMDB_TO_FRANIME_ID = {
+  31910: 1555, // Naruto Shippuden
+  46260: 11,   // Naruto
+  85937: 41370,// Demon Slayer
+  95479: 42765,// Jujutsu Kaisen
+  1429: 7442,  // L'Attaque des Titans
+  127532: 46231,// Solo Leveling
+  37854: 12    // One Piece
+};
+
+function decodeFranimeWatch2Client(watchUrl) {
+  if (!watchUrl || !watchUrl.includes('watch2')) return null;
+  try {
+    const parsed = new URL(watchUrl);
+    for (const [, val] of parsed.searchParams.entries()) {
+      try {
+        const hexStr = atob(val);
+        if (!/^[0-9a-fA-F]+$/.test(hexStr)) continue;
+        const rawBytes = new Uint8Array(hexStr.length / 2);
+        for (let i = 0; i < rawBytes.length; i++) {
+          rawBytes[i] = parseInt(hexStr.substr(i * 2, 2), 16);
+        }
+        for (let shift = -32; shift <= 32; shift++) {
+          let s = '';
+          for (let i = 0; i < rawBytes.length; i++) s += String.fromCharCode(rawBytes[i] + shift);
+          if (s.startsWith('http://') || s.startsWith('https://')) return s;
+        }
+        for (let xorKey = 1; xorKey < 256; xorKey++) {
+          let s = '';
+          for (let i = 0; i < rawBytes.length; i++) s += String.fromCharCode(rawBytes[i] ^ xorKey);
+          if (s.startsWith('http://') || s.startsWith('https://')) return s;
+        }
+      } catch {
+        // Ignore invalid param
+      }
+    }
+  } catch {
+    // Ignore parse error
+  }
+  return null;
+}
+
+async function getClientFranimeCatalog() {
+  if (clientFranimeCatalogCache) return clientFranimeCatalogCache;
+  if (clientFranimeCatalogPromise) return clientFranimeCatalogPromise;
+  clientFranimeCatalogPromise = fetch('https://api.franime.fr/api/animes', {
+    headers: { 'Content-Type': 'application/json' }
+  })
+    .then(r => (r.ok ? r.json() : []))
+    .then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        clientFranimeCatalogCache = data;
+      }
+      clientFranimeCatalogPromise = null;
+      return clientFranimeCatalogCache || [];
+    })
+    .catch(() => {
+      clientFranimeCatalogPromise = null;
+      return [];
+    });
+  return clientFranimeCatalogPromise;
+}
 
 /**
- * Interroge le résolveur FRAnime VF/VOSTFR du serveur Vite (/api/vf-resolve) pour n'importe lequel des 2553 animés
+ * Interroge le résolveur FRAnime VF/VOSTFR du serveur Vite (/api/vf-resolve) ou directement l'API FRAnime (mode APK autonome)
  */
 export async function fetchDynamicFranimeLinks({ tmdbId, title, originalTitle, season = 1, episode = 1, lang = 'vf' }) {
   if (lang === 'vo') return null;
@@ -312,6 +377,8 @@ export async function fetchDynamicFranimeLinks({ tmdbId, title, originalTitle, s
   if (dynamicVfCache.has(cacheKey)) {
     return dynamicVfCache.get(cacheKey);
   }
+
+  // 1. Essayer d'abord le résolveur local /api/vf-resolve (ultra-rapide avec extraction directMp4)
   try {
     const params = new URLSearchParams({
       tmdbId: String(tmdbId || ''),
@@ -322,15 +389,83 @@ export async function fetchDynamicFranimeLinks({ tmdbId, title, originalTitle, s
       lang: String(lang)
     });
     const res = await fetch(`/api/vf-resolve?${params.toString()}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data && data.found && data.hosters) {
-      dynamicVfCache.set(cacheKey, data.hosters);
-      return data.hosters;
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.found && data.hosters) {
+          dynamicVfCache.set(cacheKey, data.hosters);
+          return data.hosters;
+        }
+      }
     }
   } catch {
-    // Fallback sur les liens préchargés si hors-ligne / APK
+    // Continuer vers le résolveur autonome (mode APK Capacitor)
   }
+
+  // 2. Fallback autonome direct sur https://api.franime.fr (pour l'application Android Kingbox.apk)
+  try {
+    const catalog = await getClientFranimeCatalog();
+    const numTmdb = Number(tmdbId || 0);
+    const tLower = String(title || '').toLowerCase().trim();
+    const oLower = String(originalTitle || '').toLowerCase().trim();
+
+    let anime = null;
+    if (numTmdb && TMDB_TO_FRANIME_ID[numTmdb]) {
+      anime = catalog.find(a => a.id === TMDB_TO_FRANIME_ID[numTmdb]);
+    }
+    if (!anime && (tLower || oLower)) {
+      anime = catalog.find(a => {
+        const candidates = [a.titleO, a.title, a.titles?.en, a.titles?.en_jp, a.titles?.ja_jp]
+          .filter(Boolean)
+          .map(x => String(x).toLowerCase());
+        return candidates.some(c => (tLower && c.includes(tLower)) || (oLower && c.includes(oLower)));
+      });
+    }
+    if (!anime || !Array.isArray(anime.saisons) || anime.saisons.length === 0) return null;
+
+    const sIdx = Math.min(Math.max(0, Number(season) - 1), anime.saisons.length - 1);
+    const episodes = anime.saisons[sIdx]?.episodes || [];
+    const epIdx = Math.min(Math.max(0, Number(episode) - 1), episodes.length - 1);
+    const epObj = episodes[epIdx];
+    if (!epObj) return null;
+
+    const vfLecteurs = epObj.lang?.vf?.lecteurs || [];
+    const voLecteurs = epObj.lang?.vo?.lecteurs || [];
+    const activeLangKey = (lang === 'vf' && vfLecteurs.length > 0) ? 'vf' : 'vo';
+    const lecteurs = activeLangKey === 'vf' ? vfLecteurs : voLecteurs;
+
+    const hosters = {};
+    await Promise.all(
+      lecteurs.map(async (lecteurName, idx) => {
+        const key = String(lecteurName).toLowerCase();
+        if (key === 'sibnet' || hosters[key]) return;
+        try {
+          const apiRes = await fetch(
+            `https://api.franime.fr/api/anime/${anime.id}/${sIdx}/${epIdx}/${activeLangKey}/${idx}`,
+            { headers: { 'Content-Type': 'application/json' } }
+          );
+          if (!apiRes.ok) return;
+          const watchText = (await apiRes.text()).trim();
+          const decoded = decodeFranimeWatch2Client(watchText);
+          if (decoded) hosters[key] = decoded;
+        } catch {
+          // Ignore single hoster failure
+        }
+      })
+    );
+
+    const bestDefault = hosters.sendvid || hosters.vidmoly || hosters.uqload || hosters.filemoon || null;
+    if (bestDefault) hosters.sibnet = bestDefault;
+
+    if (Object.keys(hosters).length > 0) {
+      dynamicVfCache.set(cacheKey, hosters);
+      return hosters;
+    }
+  } catch {
+    // Fallback sur les liens préchargés si hors-ligne
+  }
+
   return null;
 }
 
