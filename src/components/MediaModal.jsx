@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Heart, Star, Share2, Check, Download, Tv, Calendar, Clock, Loader2, Sparkles, Film } from 'lucide-react';
+import { X, Play, Heart, Star, Share2, Check, Download, Tv, Loader2, Film, ShieldCheck, Server, Globe } from 'lucide-react';
 import { getTmdbApiKey, fetchTvSeasonsInfo, fetchSeasonEpisodes } from '../utils/tmdb';
+import { AUDIO_LANGUAGES, FRANIME_HOSTERS } from '../utils/franimeHosters';
 
 export default function MediaModal({ 
   item, 
@@ -12,6 +13,10 @@ export default function MediaModal({
 }) {
   const [copied, setCopied] = useState(false);
   
+  // Sélection de langue & d'hébergeur sans pub (Style FRAnime)
+  const [selectedLang, setSelectedLang] = useState('vf');
+  const [selectedHoster, setSelectedHoster] = useState('sibnet');
+
   // Real TMDB Seasons & Episodes state
   const [seasons, setSeasons] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
@@ -75,11 +80,25 @@ export default function MediaModal({
 
   if (!item) return null;
 
+  const handleLaunchPlay = (customEpisode = null, customHoster = null, customLang = null) => {
+    const langToUse = customLang || selectedLang;
+    const hosterToUse = customHoster || selectedHoster;
+    const epToUse = customEpisode || (episodes.length > 0 ? { ...episodes[0], season: selectedSeason } : null);
+
+    onPlay({
+      ...item,
+      preferredLang: langToUse,
+      preferredHoster: hosterToUse,
+      currentEpisode: isShow ? epToUse : null,
+      videoUrl: epToUse?.videoUrl || item.videoUrl
+    });
+  };
+
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
         title: `Kingbox - ${item.title}`,
-        text: `Regarde ${item.title} en streaming sur Kingbox !`,
+        text: `Regarde ${item.title} en VF/VOSTFR sans pub sur Kingbox !`,
         url: window.location.href,
       }).catch(() => {});
     } else {
@@ -88,6 +107,8 @@ export default function MediaModal({
       setTimeout(() => setCopied(false), 2500);
     }
   };
+
+  const currentHosterInfo = FRANIME_HOSTERS.find(h => h.id === selectedHoster) || FRANIME_HOSTERS[0];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto bg-black/85 backdrop-blur-md animate-fadeIn">
@@ -120,7 +141,7 @@ export default function MediaModal({
             {/* Play Button Overlay */}
             <div className="absolute inset-0 flex items-center justify-center">
               <button
-                onClick={() => onPlay(item)}
+                onClick={() => handleLaunchPlay()}
                 className="group p-5 rounded-full bg-red-600/90 hover:bg-red-500 text-white shadow-2xl shadow-red-600/60 backdrop-blur-sm transition-all transform hover:scale-110 active:scale-95 flex items-center justify-center"
               >
                 <Play className="w-8 h-8 fill-white translate-x-0.5" />
@@ -137,7 +158,12 @@ export default function MediaModal({
                 <div className="flex items-center space-x-2 text-xs uppercase tracking-wider text-red-400 font-bold mb-1">
                   <span>{item.type === 'anime' ? 'Série Animée' : item.type === 'tv' ? 'Série Télévisée' : 'Film'}</span>
                   <span>•</span>
-                  <span>{item.quality || '4K UHD'}</span>
+                  <span>{item.quality || '1080p / 4K'}</span>
+                  <span>•</span>
+                  <span className="text-emerald-400 flex items-center space-x-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Sans Pub</span>
+                  </span>
                 </div>
                 <h2 className="text-2xl sm:text-4xl font-extrabold text-white">
                   {item.title}
@@ -147,11 +173,11 @@ export default function MediaModal({
               {/* Actions */}
               <div className="flex flex-wrap items-center gap-2.5">
                 <button
-                  onClick={() => onPlay(item)}
+                  onClick={() => handleLaunchPlay()}
                   className="flex items-center space-x-2 bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg shadow-red-600/30 active:scale-95"
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Lecture</span>
+                  <span>Lire en {selectedLang.toUpperCase()} ({currentHosterInfo.name})</span>
                 </button>
 
                 <button
@@ -197,9 +223,89 @@ export default function MediaModal({
               <span className="px-2.5 py-1 rounded-md bg-zinc-800 font-semibold text-zinc-300">
                 {item.duration}
               </span>
-              <span className="px-2.5 py-1 rounded-md bg-zinc-800/60 font-semibold text-zinc-400 border border-zinc-700/50">
-                Audio: Français (VF) / Multi-langues
+              <span className="px-2.5 py-1 rounded-md bg-blue-600/20 font-bold text-blue-300 border border-blue-500/30">
+                🇫🇷 VF Disponible
               </span>
+              <span className="px-2.5 py-1 rounded-md bg-red-600/20 font-bold text-red-300 border border-red-500/30">
+                🇯🇵 VOSTFR Disponible
+              </span>
+            </div>
+
+            {/* PANNEAU DE SÉLECTION STYLE FRANIME : LANGUE (VF / VOSTFR) & HÉBERGEURS SANS PUB */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-4 shadow-inner">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Globe className="w-4 h-4 text-red-500" />
+                  <span className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                    1. Choisir la version audio :
+                  </span>
+                </div>
+
+                {/* Language Selector Pills */}
+                <div className="flex items-center space-x-2">
+                  {AUDIO_LANGUAGES.map((lang) => (
+                    <button
+                      key={lang.id}
+                      onClick={() => setSelectedLang(lang.id)}
+                      className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                        selectedLang === lang.id
+                          ? 'bg-red-600 text-white shadow-lg shadow-red-600/30 scale-105'
+                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700/70'
+                      }`}
+                    >
+                      <span>{lang.flag}</span>
+                      <span>{lang.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Third-party Ad-free Hosters Selector (Sibnet, Sendvid, Vidmoly, VK, Filemoon, Uqload) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Server className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                      2. Lecteur / Hébergeur Sans Pub (Architecture FRAnime) :
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-emerald-400 font-semibold hidden sm:inline">
+                    ✓ Zéro popup intrusive
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                  {FRANIME_HOSTERS.map((hoster) => {
+                    const isSelected = selectedHoster === hoster.id;
+                    return (
+                      <button
+                        key={hoster.id}
+                        onClick={() => setSelectedHoster(hoster.id)}
+                        className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-red-600/20 border-red-500 text-white shadow-md shadow-red-950/50'
+                            : 'bg-zinc-800/70 border-zinc-700/60 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full mb-1">
+                          <span className="text-xs font-extrabold truncate">{hoster.name}</span>
+                          {isSelected && <span className="w-2 h-2 rounded-full bg-red-500"></span>}
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                          {hoster.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="text-[11px] text-zinc-400 flex items-center justify-between pt-1">
+                  <span>
+                    Lecteur actif : <strong className="text-white">{currentHosterInfo.name}</strong> — {currentHosterInfo.description}
+                  </span>
+                  <span className="text-amber-400 font-bold shrink-0 ml-2">{currentHosterInfo.quality}</span>
+                </p>
+              </div>
             </div>
 
             {/* Genres */}
@@ -233,14 +339,14 @@ export default function MediaModal({
               </div>
             )}
 
-            {/* REAL SEASONS & EPISODES PICKER (TMDB Live Integration) */}
+            {/* REAL SEASONS & EPISODES PICKER (TMDB Live Integration + FRAnime Hosters) */}
             {isShow && (
               <div className="pt-6 border-t border-zinc-800 space-y-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-2">
                     <Tv className="w-5 h-5 text-red-500" />
                     <h3 className="text-base sm:text-lg font-bold text-white">
-                      Épisodes & Saisons
+                      Épisodes & Saisons ({selectedLang.toUpperCase()})
                     </h3>
                   </div>
 
@@ -268,87 +374,105 @@ export default function MediaModal({
                 {loadingEpisodes ? (
                   <div className="py-12 flex flex-col items-center justify-center space-y-2 text-zinc-400">
                     <Loader2 className="w-6 h-6 animate-spin text-red-500" />
-                    <span className="text-xs">Chargement des épisodes en haute définition...</span>
+                    <span className="text-xs">Chargement des épisodes VF / VOSTFR en haute définition...</span>
                   </div>
                 ) : episodes && episodes.length > 0 ? (
                   <div className="space-y-3">
                     {episodes.map((ep) => (
                       <div
                         key={ep.number}
-                        className="group/ep flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-all gap-3"
+                        className="group/ep flex flex-col p-3 sm:p-4 rounded-2xl bg-zinc-900/60 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 transition-all gap-3"
                       >
-                        <div 
-                          onClick={() => onPlay({ 
-                            ...item, 
-                            currentEpisode: { ...ep, season: selectedSeason }, 
-                            videoUrl: ep.videoUrl || item.videoUrl 
-                          })}
-                          className="flex items-start sm:items-center space-x-3.5 cursor-pointer flex-1"
-                        >
-                          {/* Thumbnail / Still preview */}
-                          <div className="relative w-24 sm:w-28 aspect-video rounded-xl overflow-hidden bg-zinc-800 shrink-0">
-                            {ep.still ? (
-                              <img src={ep.still} alt={ep.title} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-600">
-                                <Film className="w-6 h-6" />
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div 
+                            onClick={() => handleLaunchPlay({ ...ep, season: selectedSeason })}
+                            className="flex items-start sm:items-center space-x-3.5 cursor-pointer flex-1"
+                          >
+                            {/* Thumbnail / Still preview */}
+                            <div className="relative w-24 sm:w-28 aspect-video rounded-xl overflow-hidden bg-zinc-800 shrink-0">
+                              {ep.still ? (
+                                <img src={ep.still} alt={ep.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-zinc-800 text-zinc-600">
+                                  <Film className="w-6 h-6" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/40 group-hover/ep:bg-black/10 transition-colors flex items-center justify-center">
+                                <div className="w-7 h-7 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg transform group-hover/ep:scale-110 transition-transform">
+                                  <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                                </div>
                               </div>
-                            )}
-                            <div className="absolute inset-0 bg-black/40 group-hover/ep:bg-black/10 transition-colors flex items-center justify-center">
-                              <div className="w-7 h-7 rounded-full bg-red-600/90 text-white flex items-center justify-center shadow-lg transform group-hover/ep:scale-110 transition-transform">
-                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                              </div>
-                            </div>
-                            <span className="absolute bottom-1 right-1 px-1 rounded bg-black/80 text-[9px] font-mono text-zinc-300">
-                              {ep.duration}
-                            </span>
-                          </div>
-
-                          {/* Episode Title & Synopsis */}
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-xs font-bold text-red-400">
-                                Épisode {ep.number}
+                              <span className="absolute bottom-1 right-1 px-1 rounded bg-black/80 text-[9px] font-mono text-zinc-300">
+                                {ep.duration}
                               </span>
-                              {ep.rating && (
-                                <span className="text-[10px] text-amber-400 flex items-center space-x-0.5">
-                                  <Star className="w-3 h-3 fill-amber-400" />
-                                  <span>{ep.rating}</span>
+                            </div>
+
+                            {/* Episode Title & Synopsis */}
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-xs font-bold text-red-400">
+                                  Épisode {ep.number}
                                 </span>
+                                <span className="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-blue-600/20 text-blue-300 border border-blue-500/30">
+                                  VF
+                                </span>
+                                <span className="px-1.5 py-0.5 text-[9px] font-extrabold rounded bg-red-600/20 text-red-300 border border-red-500/30">
+                                  VOSTFR
+                                </span>
+                                {ep.rating && (
+                                  <span className="text-[10px] text-amber-400 flex items-center space-x-0.5">
+                                    <Star className="w-3 h-3 fill-amber-400" />
+                                    <span>{ep.rating}</span>
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="text-sm font-semibold text-zinc-100 group-hover/ep:text-white line-clamp-1">
+                                {ep.title}
+                              </h4>
+                              {ep.overview && (
+                                <p className="text-xs text-zinc-400 line-clamp-2 max-w-lg">
+                                  {ep.overview}
+                                </p>
                               )}
                             </div>
-                            <h4 className="text-sm font-semibold text-zinc-100 group-hover/ep:text-white line-clamp-1">
-                              {ep.title}
-                            </h4>
-                            {ep.overview && (
-                              <p className="text-xs text-zinc-400 line-clamp-2 max-w-lg">
-                                {ep.overview}
-                              </p>
-                            )}
+                          </div>
+
+                          {/* Episode Action Buttons */}
+                          <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
+                            <button
+                              onClick={() => onDownload?.(item, { ...ep, season: selectedSeason })}
+                              className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 transition-colors border border-zinc-700/60"
+                              title={`Télécharger l'épisode ${ep.number}`}
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            
+                            <button 
+                              onClick={() => handleLaunchPlay({ ...ep, season: selectedSeason })}
+                              className="flex items-center space-x-1.5 px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-600/20"
+                            >
+                              <Play className="w-3 h-3 fill-white" />
+                              <span>Lire ({selectedLang.toUpperCase()})</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* Episode Action Buttons */}
-                        <div className="flex items-center space-x-2 self-end sm:self-center shrink-0">
-                          <button
-                            onClick={() => onDownload?.(item, { ...ep, season: selectedSeason })}
-                            className="p-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 transition-colors border border-zinc-700/60"
-                            title={`Télécharger l'épisode ${ep.number}`}
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-                          
-                          <button 
-                            onClick={() => onPlay({ 
-                              ...item, 
-                              currentEpisode: { ...ep, season: selectedSeason }, 
-                              videoUrl: ep.videoUrl || item.videoUrl 
-                            })}
-                            className="flex items-center space-x-1.5 px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-600/20"
-                          >
-                            <Play className="w-3 h-3 fill-white" />
-                            <span>Lire</span>
-                          </button>
+                        {/* Quick Hoster Pills per Episode (Sibnet, Sendvid, Vidmoly, Filemoon, VK, Uqload) */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-800/60 text-[10px]">
+                          <span className="text-zinc-500 font-semibold mr-1">Lecteurs directs sans pub :</span>
+                          {FRANIME_HOSTERS.map((h) => (
+                            <button
+                              key={h.id}
+                              onClick={() => handleLaunchPlay({ ...ep, season: selectedSeason }, h.id, selectedLang)}
+                              className={`px-2 py-0.5 rounded-md font-bold transition-colors border ${
+                                selectedHoster === h.id
+                                  ? 'bg-red-600/25 border-red-500/60 text-red-300'
+                                  : 'bg-zinc-800/80 border-zinc-700/60 text-zinc-400 hover:text-white hover:border-zinc-500'
+                              }`}
+                            >
+                              {h.name}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     ))}

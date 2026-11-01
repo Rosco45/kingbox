@@ -22,10 +22,13 @@ export default function MediaCard({
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
 
-        {/* Quality Badge */}
-        <div className="absolute top-2.5 left-2.5 z-10">
-          <span className="px-1.5 py-0.5 text-[10px] font-extrabold uppercase bg-black/70 backdrop-blur-md text-amber-300 rounded border border-amber-500/30">
+        {/* Quality & Lang Badges */}
+        <div className="absolute top-2.5 left-2.5 z-10 flex items-center space-x-1">
+          <span className="px-1.5 py-0.5 text-[10px] font-extrabold uppercase bg-black/75 backdrop-blur-md text-amber-300 rounded border border-amber-500/30">
             {item.quality || 'HD'}
+          </span>
+          <span className="px-1.5 py-0.5 text-[9px] font-extrabold uppercase bg-red-600/90 backdrop-blur-md text-white rounded shadow-sm">
+            {item.type === 'anime' ? 'VF • VOSTFR' : 'VF • VO'}
           </span>
         </div>
 
