@@ -9,6 +9,7 @@ import {
   FRANIME_HOSTERS, 
   resolveHosterEmbedUrl, 
   resolveAnimeIds,
+  getSyncAnimeIds,
   createSubtitleBlobUrl 
 } from '../utils/franimeHosters';
 
@@ -30,16 +31,11 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const [activeEpisodeNum, setActiveEpisodeNum] = useState(media?.currentEpisode?.number || 1);
   const [activeEpisodeTitle, setActiveEpisodeTitle] = useState(media?.currentEpisode?.title || 'Épisode 1');
 
-  // Identifiants Anime (AniList / MAL) résolus automatiquement pour le switch VF (Dub) / VOSTFR (Sub)
-  const [resolvedIds, setResolvedIds] = useState({
-    anilistId: media?.anilistId || null,
-    malId: media?.malId || null
-  });
+  // Identifiants Anime (AniList / MAL) résolus instantanément (0ms pour Naruto Shippuden & top animés)
+  const [resolvedIds, setResolvedIds] = useState(() => getSyncAnimeIds(media));
 
-  // Bouton Bouclier Sandbox (Style FRAnime : activable/désactivable en 1 clic)
-  const [isSandboxEnabled, setIsSandboxEnabled] = useState(() => {
-    return localStorage.getItem('kingbox_sandbox_shield') === 'true';
-  });
+  // Bouton Bouclier Sandbox (Style FRAnime : désactivé par défaut au lancement pour éviter tout écran noir)
+  const [isSandboxEnabled, setIsSandboxEnabled] = useState(false);
   const [shieldToast, setShieldToast] = useState(null);
 
   const [showControls, setShowControls] = useState(true);
@@ -53,28 +49,42 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const isAnime = media?.type === 'anime';
   const tmdbId = media?.tmdbId || null;
 
-  // Synchroniser l'état quand le média ou les préférences changent
+  // Nettoyer tout ancien état bloquant en localStorage et synchroniser avec le média sélectionné
+  useEffect(() => {
+    try {
+      localStorage.removeItem('kingbox_sandbox_shield');
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!media) return;
     const initLang = media.preferredLang || 'vf';
-    const initHoster = media.preferredHoster || (media.isAdult && !media.tmdbId ? 'direct' : 'sibnet');
+    const initHoster = media.preferredHoster || (media.isAdult && !media.tmdbId && !media.malId && !media.anilistId ? 'direct' : 'sibnet');
     setSelectedLang(initLang);
     setCurrentHoster(initHoster);
     setSelectedSub(initLang === 'vo' ? 'en' : 'fr');
     setActiveSeason(media.currentEpisode?.season || 1);
     setActiveEpisodeNum(media.currentEpisode?.number || 1);
     setActiveEpisodeTitle(media.currentEpisode?.title || `Épisode ${media.currentEpisode?.number || 1}`);
+    setResolvedIds(getSyncAnimeIds(media));
     setIframeLoading(true);
     setHasError(false);
   }, [media]);
 
-  // Résoudre automatiquement les IDs AniList / MAL pour les animés afin que VF (dub) et VOSTFR (sub) soient exacts
+  // Résoudre automatiquement les IDs AniList / MAL pour les animés non présents dans le cache synchrone
   useEffect(() => {
     let mounted = true;
-    if (media && isAnime) {
-      resolveAnimeIds(media).then((ids) => {
-        if (mounted) setResolvedIds(ids);
-      });
+    if (media && (isAnime || !media.tmdbId)) {
+      const sync = getSyncAnimeIds(media);
+      if (sync.anilistId || sync.malId) {
+        setResolvedIds(sync);
+      } else {
+        resolveAnimeIds(media).then((ids) => {
+          if (mounted && (ids.anilistId || ids.malId)) {
+            setResolvedIds(ids);
+          }
+        });
+      }
     }
     return () => { mounted = false; };
   }, [media, isAnime]);
@@ -90,28 +100,37 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     return () => URL.revokeObjectURL(url);
   }, [selectedSub, media?.title]);
 
+  const currentHosterObj = FRANIME_HOSTERS.find((h) => h.id === currentHoster) || FRANIME_HOSTERS[0];
+  const currentLangObj = AUDIO_LANGUAGES.find((l) => l.id === selectedLang) || AUDIO_LANGUAGES[0];
+
   const toggleSandboxShield = () => {
     const nextState = !isSandboxEnabled;
+    if (nextState && !currentHosterObj.supportsSandbox) {
+      setIsSandboxEnabled(false);
+      setShieldToast(
+        `⚠️ Le lecteur ${currentHosterObj.name} bloque l'attribut HTML Sandbox (écran noir). Le Bouclier Anti-Popup JS reste actif ! Utilisez Sibnet ou VK Video pour le Sandbox strict.`
+      );
+      return;
+    }
     setIsSandboxEnabled(nextState);
     setIframeLoading(true);
-    localStorage.setItem('kingbox_sandbox_shield', String(nextState));
     setShieldToast(
       nextState
-        ? '🛡️ Bouclier Sandbox ACTIVÉ : Protection stricte contre les redirections (désactivez-le si le lecteur affiche "Playback blocked").'
-        : '🔓 Bouclier Sandbox DÉSACTIVÉ : Mode compatibilité maximale pour tous les lecteurs.'
+        ? `🛡️ Bouclier Sandbox ACTIVÉ sur ${currentHosterObj.name} : Protection maximale sans blocage.`
+        : `🔓 Bouclier Sandbox DÉSACTIVÉ : Mode compatibilité maximale pour tous les lecteurs.`
     );
   };
 
   useEffect(() => {
     if (!shieldToast) return;
-    const timer = setTimeout(() => setShieldToast(null), 4000);
+    const timer = setTimeout(() => setShieldToast(null), 4500);
     return () => clearTimeout(timer);
   }, [shieldToast]);
 
   // Timeout de sécurité pour masquer le spinner si l'iframe externe ne déclenche pas onLoad
   useEffect(() => {
     if (!iframeLoading) return;
-    const timer = setTimeout(() => setIframeLoading(false), 2200);
+    const timer = setTimeout(() => setIframeLoading(false), 1800);
     return () => clearTimeout(timer);
   }, [iframeLoading, currentHoster, selectedLang, activeSeason, activeEpisodeNum]);
 
@@ -123,7 +142,7 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     { id: 'ar', label: 'العربية (AR)', lang: 'ar' }
   ];
 
-  // Bouclier Anti-Popup Intelligent (intercepte window.open sans bloquer l'iframe)
+  // Bouclier Anti-Popup Intelligent (intercepte window.open en permanence sans bloquer l'iframe)
   useEffect(() => {
     const originalWindowOpen = window.open;
     window.open = function () {
@@ -149,6 +168,9 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     customHosters: media?.hosters
   });
 
+  // Seuls les hébergeurs compatibles Sandbox reçoivent l'attribut sandbox HTML
+  const effectiveSandbox = isSandboxEnabled && currentHosterObj.supportsSandbox;
+
   // Flux vidéo direct HD (alterne selon la langue ou l'épisode pour un rendu réactif)
   const directVideoUrl = selectedLang === 'vostfr' || activeEpisodeNum % 2 === 0
     ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4"
@@ -156,18 +178,20 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
         ? media.videoUrl
         : "https://vjs.zencdn.net/v/oceans.mp4");
 
-  const currentHosterObj = FRANIME_HOSTERS.find((h) => h.id === currentHoster) || FRANIME_HOSTERS[0];
-  const currentLangObj = AUDIO_LANGUAGES.find((l) => l.id === selectedLang) || AUDIO_LANGUAGES[0];
-
   const handleLanguageSwitch = (langId) => {
     setSelectedLang(langId);
     setSelectedSub(langId === 'vo' ? 'en' : 'fr');
     setHasError(false);
     setIframeLoading(true);
-    setShieldToast(`🎧 Audio basculé sur ${langId.toUpperCase()} (${langId === 'vf' ? 'Version Française' : langId === 'vostfr' ? 'VO Sous-titré Français' : 'Version Originale'})`);
+    setShieldToast(`🎧 Audio basculé sur ${langId.toUpperCase()} (${langId === 'vf' ? 'Version Française / Dub' : langId === 'vostfr' ? 'VO Sous-titré / Sub' : 'Version Originale'})`);
   };
 
   const handleHosterSwitch = (hosterId) => {
+    const targetObj = FRANIME_HOSTERS.find((h) => h.id === hosterId);
+    if (isSandboxEnabled && targetObj && !targetObj.supportsSandbox) {
+      setIsSandboxEnabled(false);
+      setShieldToast(`🔓 Passage automatique en Mode Compatible (Bouclier OFF) pour le lecteur ${targetObj.name}.`);
+    }
     setCurrentHoster(hosterId);
     setHasError(false);
     setIframeLoading(true);
@@ -294,19 +318,19 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
               <button
                 onClick={toggleSandboxShield}
                 className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full border font-bold transition-all cursor-pointer ${
-                  isSandboxEnabled
+                  effectiveSandbox
                     ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
                     : 'bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25'
                 }`}
-                title="Cliquez pour activer ou désactiver le mode protégé (Sandbox) si un lecteur est bloqué"
+                title="Cliquez pour activer ou désactiver le mode protégé (Sandbox)"
               >
-                {isSandboxEnabled ? (
+                {effectiveSandbox ? (
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 ) : (
                   <ShieldOff className="w-3.5 h-3.5 text-amber-400" />
                 )}
                 <span>
-                  {isSandboxEnabled
+                  {effectiveSandbox
                     ? `Bouclier Sandbox ON (${currentHosterObj.name})`
                     : `Bouclier OFF • Mode Compatible (${currentHosterObj.name})`}
                   {blockedPopupsCount > 0 ? ` • ${blockedPopupsCount} pub(s) bloquée(s)` : ''}
@@ -326,23 +350,23 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
             <button
               onClick={toggleSandboxShield}
               className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all border shadow-md ${
-                isSandboxEnabled
+                effectiveSandbox
                   ? 'bg-emerald-600/25 border-emerald-500 text-emerald-300 hover:bg-emerald-600/35 shadow-emerald-950/50'
                   : 'bg-amber-600/20 border-amber-500/70 text-amber-300 hover:bg-amber-600/30'
               }`}
               title={
-                isSandboxEnabled
-                  ? "Bouclier Sandbox ACTIVÉ : Cliquez pour le désactiver si le lecteur affiche 'Playback blocked / sandboxed frame'"
-                  : "Bouclier Sandbox DÉSACTIVÉ (Mode compatible) : Cliquez pour activer le blocage strict par Sandbox"
+                effectiveSandbox
+                  ? "Bouclier Sandbox ACTIVÉ : Cliquez pour le désactiver"
+                  : "Bouclier Sandbox DÉSACTIVÉ (Mode compatible sans blocage) : Cliquez pour activer le Sandbox"
               }
             >
-              {isSandboxEnabled ? (
+              {effectiveSandbox ? (
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
               ) : (
                 <ShieldOff className="w-4 h-4 text-amber-400" />
               )}
               <span className="hidden sm:inline">
-                {isSandboxEnabled ? 'Bouclier ON' : 'Bouclier OFF'}
+                {effectiveSandbox ? 'Bouclier ON' : 'Bouclier OFF'}
               </span>
             </button>
 
@@ -492,11 +516,11 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
           )}
 
           <iframe
-            key={`hoster-${currentHoster}-${selectedLang}-${tmdbId || resolvedIds.anilistId || media.id}-${activeSeason}-${activeEpisodeNum}-sb-${isSandboxEnabled}`}
+            key={`${embedUrl}-sb-${effectiveSandbox}`}
             src={embedUrl}
             title={`${media.title} - ${currentHosterObj.name} (${selectedLang.toUpperCase()})`}
             className="w-full h-full border-0"
-            {...(isSandboxEnabled
+            {...(effectiveSandbox
               ? { sandbox: 'allow-scripts allow-same-origin allow-forms allow-presentation' }
               : {})}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"

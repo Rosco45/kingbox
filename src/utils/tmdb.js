@@ -1,4 +1,6 @@
 // Service complet TMDB pour Kingbox
+import { KNOWN_ANIME_IDS } from './franimeHosters';
+
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p';
 
@@ -23,14 +25,21 @@ export const getTmdbImageUrl = (path, size = 'w500') => {
 
 // Formater un élément TMDB au format interne Kingbox
 export function formatTmdbMedia(item, forcedType = null) {
-  const isTv = forcedType === 'tv' || item.media_type === 'tv' || (!item.title && !!item.name);
-  const isAnime = forcedType === 'anime' || (item.genre_ids && item.genre_ids.includes(16) && (item.origin_country?.includes('JP') || item.original_language === 'ja'));
-  
+  const isTv = forcedType === 'tv' || forcedType === 'anime' || item.media_type === 'tv' || (!item.title && !!item.name);
+  const hasAnimGenre =
+    (item.genre_ids && item.genre_ids.includes(16)) ||
+    (item.genres && item.genres.some((g) => g.id === 16 || g.name?.toLowerCase().includes('anim')));
+  const isJapanese = item.origin_country?.includes('JP') || item.original_language === 'ja';
+  const knownAnime = item.id && KNOWN_ANIME_IDS[Number(item.id)] ? KNOWN_ANIME_IDS[Number(item.id)] : null;
+  const isAnime = forcedType === 'anime' || !!knownAnime || (hasAnimGenre && isJapanese);
+
   const type = isAnime ? 'anime' : (isTv ? 'tv' : 'movie');
 
   return {
     id: `tmdb-${type}-${item.id}`,
     tmdbId: item.id,
+    anilistId: knownAnime?.anilistId || null,
+    malId: knownAnime?.malId || null,
     title: item.title || item.name || 'Titre inconnu',
     originalTitle: item.original_title || item.original_name || '',
     type: type,

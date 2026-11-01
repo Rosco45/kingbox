@@ -310,6 +310,57 @@ export const MEDIA_LIST = [
       { number: 1089, title: "Vers un nouveau chapitre ! L'île du futur, Egghead !", duration: "24 min", videoUrl: VERIFIED_STREAM_2 },
       { number: 1090, title: "Nouvelle île ! L'île futuriste d'Egghead !", duration: "24 min", videoUrl: VERIFIED_STREAM_1 }
     ]
+  },
+  {
+    id: "anime-5",
+    tmdbId: 31910, // Naruto Shippuden
+    anilistId: 1735,
+    malId: 1735,
+    title: "Naruto Shippuden",
+    originalTitle: "ナルト 疾風伝",
+    type: "anime",
+    rating: 8.8,
+    year: 2007,
+    quality: "1080p FHD",
+    duration: "21 Saisons",
+    genres: ["Action", "Aventure", "Animation", "Fantastique"],
+    poster: "https://image.tmdb.org/t/p/w500/kV27j3Nz4d5z8u6mN3EJw9RiLg2.jpg",
+    backdrop: "https://image.tmdb.org/t/p/w1280/z0YhJvomqedHF85bplUJEotkN5l.jpg",
+    synopsis: "Après deux ans et demi d'entraînement intensif avec Jiraiya, Naruto Uzumaki revient à Konoha plus déterminé que jamais à sauver Sasuke et à faire face à l'organisation secrète Akatsuki.",
+    cast: ["Junko Takeuchi", "Noriaki Sugiyama", "Chie Nakamura"],
+    videoUrl: VERIFIED_STREAM_1,
+    trending: true,
+    popular: true,
+    episodes: [
+      { number: 1, title: "Retour au pays", duration: "24 min", videoUrl: VERIFIED_STREAM_1 },
+      { number: 2, title: "L'Akatsuki entre en action", duration: "24 min", videoUrl: VERIFIED_STREAM_2 },
+      { number: 3, title: "Les fruits de l'entraînement", duration: "24 min", videoUrl: VERIFIED_STREAM_1 }
+    ]
+  },
+  {
+    id: "anime-6",
+    tmdbId: 127532, // Solo Leveling
+    anilistId: 151807,
+    malId: 52299,
+    title: "Solo Leveling",
+    originalTitle: "俺だけレベルアップな件",
+    type: "anime",
+    rating: 8.9,
+    year: 2024,
+    quality: "4K UHD",
+    duration: "2 Saisons",
+    genres: ["Action", "Aventure", "Animation", "Dark Fantasy"],
+    poster: "https://image.tmdb.org/t/p/w500/geCRueV3ElhRTr0xtJuEWJt6dJ1.jpg",
+    backdrop: "https://image.tmdb.org/t/p/w1280/4N6zEMfZ57zNEQcM8gWeERFupMv.jpg",
+    synopsis: "Dans un monde où des chasseurs dotés de pouvoirs magiques doivent combattre des monstres mortels pour protéger l'humanité, Sung Jinwoo, le chasseur le plus faible de tous, obtient un mystérieux système lui permettant de monter de niveau sans limite.",
+    cast: ["Taito Ban", "Reina Ueda", "Hiroki Touchi"],
+    videoUrl: VERIFIED_STREAM_2,
+    trending: true,
+    popular: true,
+    episodes: [
+      { number: 1, title: "J'ai l'habitude", duration: "24 min", videoUrl: VERIFIED_STREAM_2 },
+      { number: 2, title: "Si j'avais une autre chance", duration: "24 min", videoUrl: VERIFIED_STREAM_1 }
+    ]
   }
 ];
 
