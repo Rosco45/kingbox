@@ -728,3 +728,118 @@ Transmisión en alta definición sin publicidad en Kingbox.`,
   const blob = new Blob([content], { type: 'text/vtt;charset=utf-8' });
   return URL.createObjectURL(blob);
 }
+
+const downloadClientCache = new Map();
+
+/**
+ * Résout le vrai fichier vidéo complet (.mp4 direct ou flux HLS complet) d'un Film, d'une Série ou d'un Animé
+ */
+export async function resolveRealDownload({
+  media,
+  episode = null,
+  lang = 'vf',
+  waitUqload = false
+}) {
+  if (!media) return null;
+
+  const tmdbId = media.tmdbId || '';
+  const type = media.type || 'movie';
+  const title = media.title || '';
+  const originalTitle = media.originalTitle || '';
+  const season = episode?.season || media.currentEpisode?.season || 1;
+  const epNum = episode?.number || media.currentEpisode?.number || 1;
+  const normalizedLang = String(lang || 'vf').toLowerCase();
+
+  const cacheKey = `${type}:${tmdbId}:${title}:${season}:${epNum}:${normalizedLang}`;
+  if (!waitUqload && downloadClientCache.has(cacheKey)) {
+    const cached = downloadClientCache.get(cacheKey);
+    if (cached.directMp4Url || !cached.hasPendingDirectMp4) {
+      return cached;
+    }
+  }
+
+  // 1. Appel au résolveur serveur (/api/download-resolve : Voe Direct MP4, FRAnime Sendvid MP4, Uqload Direct MP4, Vidmoly/Smoothpre HLS)
+  try {
+    const params = new URLSearchParams({
+      tmdbId: String(tmdbId),
+      type: String(type),
+      title: String(title),
+      originalTitle: String(originalTitle),
+      season: String(season),
+      episode: String(epNum),
+      lang: normalizedLang,
+      waitUqload: waitUqload ? '1' : '0'
+    });
+    const res = await fetch(`/api/download-resolve?${params.toString()}`);
+    if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.found) {
+          if (data.directMp4Url || !waitUqload) {
+            downloadClientCache.set(cacheKey, data);
+          }
+          return data;
+        }
+      }
+    }
+  } catch {
+    // Continuer vers le fallback autonome APK
+  }
+
+  // 2. Fallback autonome APK (extraction Sendvid MP4 pour les animés FRAnime)
+  if (type === 'anime') {
+    try {
+      const preloadKey = `${tmdbId}:${season}:${epNum}`;
+      const preloaded = PRELOADED_FRANIME_LINKS[preloadKey]?.[normalizedLang === 'vostfr' ? 'vostfr' : 'vf'];
+      const dynHosters =
+        preloaded ||
+        (await fetchDynamicFranimeLinks({
+          tmdbId,
+          title,
+          originalTitle,
+          season,
+          episode: epNum,
+          lang: normalizedLang
+        }));
+
+      if (dynHosters?.directMp4) {
+        return {
+          found: true,
+          provider: 'FRAnime Sendvid Direct MP4',
+          directMp4Url: dynHosters.directMp4,
+          hlsUrl: null,
+          referer: 'https://sendvid.com/',
+          fileTitle: `${title} - S${String(season).padStart(2, '0')}E${String(epNum).padStart(2, '0')}_${normalizedLang.toUpperCase()}.mp4`,
+          sizeFormatted: '115 Mo (Épisode Intégral)',
+          resolvedLang: normalizedLang.toUpperCase()
+        };
+      }
+    } catch {
+      // Ignore fallback error
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Construit l'URL de téléchargement binaire direct (/api/download-stream ou lien MP4 direct avec Content-Disposition)
+ */
+export function buildDownloadStreamUrl(resolvedInfo, customFilename = 'Kingbox_Video.mp4') {
+  if (!resolvedInfo) return null;
+  const params = new URLSearchParams({
+    filename: customFilename
+  });
+  if (resolvedInfo.directMp4Url) {
+    params.set('mp4Url', resolvedInfo.directMp4Url);
+  } else if (resolvedInfo.hlsUrl) {
+    params.set('hlsUrl', resolvedInfo.hlsUrl);
+  } else {
+    return null;
+  }
+  if (resolvedInfo.referer) {
+    params.set('referer', resolvedInfo.referer);
+  }
+  return `/api/download-stream?${params.toString()}`;
+}

@@ -11,6 +11,8 @@ import {
   resolveAnimeIds,
   getSyncAnimeIds,
   fetchDynamicFranimeLinks,
+  resolveRealDownload,
+  buildDownloadStreamUrl,
   createSubtitleBlobUrl 
 } from '../utils/franimeHosters';
 
@@ -36,6 +38,8 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   const [resolvedIds, setResolvedIds] = useState(() => getSyncAnimeIds(media));
   // Liens Vraie VF / VOSTFR résolus dynamiquement depuis le catalogue officiel FRAnime (2553 animés)
   const [dynamicFranimeHosters, setDynamicFranimeHosters] = useState(null);
+  // Flux MP4 direct résolu pour le lecteur HTML5 Direct HD (Films, Séries et Animés)
+  const [resolvedDirectInfo, setResolvedDirectInfo] = useState(null);
 
   // Bouton Bouclier Sandbox (Style FRAnime : désactivé par défaut au lancement pour éviter tout écran noir)
   const [isSandboxEnabled, setIsSandboxEnabled] = useState(false);
@@ -112,6 +116,25 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
     }
     return () => { mounted = false; };
   }, [media, isAnime, tmdbId, activeSeason, activeEpisodeNum, selectedLang]);
+
+  // Résoudre aussi le flux MP4 direct complet pour le lecteur HTML5 Direct HD (Films, Séries et Animés)
+  useEffect(() => {
+    let mounted = true;
+    setResolvedDirectInfo(null);
+    if (media) {
+      resolveRealDownload({
+        media,
+        episode: isTv ? { number: activeEpisodeNum, season: activeSeason } : null,
+        lang: selectedLang,
+        waitUqload: false
+      }).then((info) => {
+        if (mounted && info && info.found) {
+          setResolvedDirectInfo(info);
+        }
+      });
+    }
+    return () => { mounted = false; };
+  }, [media, isTv, activeSeason, activeEpisodeNum, selectedLang]);
 
   // Générer le fichier WebVTT de sous-titres pour le lecteur HTML5 Direct HD
   useEffect(() => {
@@ -196,14 +219,14 @@ export default function VideoPlayerModal({ media, onClose, onDownload }) {
   // Seuls les hébergeurs compatibles Sandbox reçoivent l'attribut sandbox HTML
   const effectiveSandbox = isSandboxEnabled && currentHosterObj.supportsSandbox;
 
-  // Flux vidéo direct HD (utilise en priorité le vrai MP4 VF/VOSTFR extrait de Sendvid FRAnime s'il est disponible)
-  const directVideoUrl = dynamicFranimeHosters?.directMp4
-    ? dynamicFranimeHosters.directMp4
-    : (selectedLang === 'vostfr' || activeEpisodeNum % 2 === 0
-        ? "https://media.w3.org/2010/05/sintel/trailer_hd.mp4"
-        : (media?.videoUrl && !media.videoUrl.includes('commondatastorage')
-            ? media.videoUrl
-            : "https://vjs.zencdn.net/v/oceans.mp4"));
+  // Flux vidéo direct HD (utilise en priorité le vrai MP4 complet VF/VOSTFR extrait de Sendvid / Voe / Uqload)
+  const directVideoUrl =
+    media?.directMp4Url ||
+    dynamicFranimeHosters?.directMp4 ||
+    resolvedDirectInfo?.directMp4Url ||
+    (resolvedDirectInfo ? buildDownloadStreamUrl(resolvedDirectInfo, 'Kingbox_Direct.mp4') : null) ||
+    media?.downloadStreamUrl ||
+    "https://vjs.zencdn.net/v/oceans.mp4";
 
   const handleLanguageSwitch = (langId) => {
     setSelectedLang(langId);

@@ -56,11 +56,22 @@ export default function App() {
     }
   });
 
-  // Downloads state
+  // Downloads state (filtre automatiquement les anciens clips démo de 25s)
   const [downloads, setDownloads] = useState(() => {
     try {
       const saved = localStorage.getItem('kingbox_downloads');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed)
+        ? parsed.filter(
+            (d) =>
+              d.directMp4Url ||
+              d.downloadStreamUrl ||
+              (d.videoUrl &&
+                !d.videoUrl.includes('oceans.mp4') &&
+                !d.videoUrl.includes('sintel/trailer_hd.mp4'))
+          )
+        : [];
     } catch {
       return [];
     }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Trash2, Play, HardDrive, CheckCircle2, Film, Tv, Sparkles, WifiOff } from 'lucide-react';
+import { Download, Trash2, Play, HardDrive, Sparkles, WifiOff, Server } from 'lucide-react';
 
 export default function DownloadsView({ 
   downloads, 
@@ -7,6 +7,18 @@ export default function DownloadsView({
   onDeleteDownload, 
   onExplore 
 }) {
+  const handleDirectSave = (item) => {
+    const targetUrl = item.downloadStreamUrl || item.directMp4Url || item.videoUrl;
+    if (!targetUrl) return;
+    const link = document.createElement('a');
+    link.href = targetUrl;
+    link.download = item.fileTitle || `${(item.title || 'Kingbox').replace(/[^a-zA-Z0-9_-]/g, '_')}.mp4`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto min-h-[70vh]">
       {/* Header */}
@@ -14,7 +26,7 @@ export default function DownloadsView({
         <div>
           <div className="flex items-center space-x-2 text-red-500 font-bold text-xs uppercase tracking-wider mb-1">
             <Download className="w-4 h-4 text-red-500" />
-            <span>Mode Hors-Ligne Kingbox</span>
+            <span>Mode Hors-Ligne & Fichiers Complets (.MP4)</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-white">
             Mes Téléchargements
@@ -25,7 +37,7 @@ export default function DownloadsView({
           <div className="flex items-center space-x-3 bg-zinc-900/80 px-4 py-2 rounded-2xl border border-zinc-800 text-xs">
             <HardDrive className="w-4 h-4 text-amber-400" />
             <span className="text-zinc-400">
-              {downloads.length} {downloads.length > 1 ? 'éléments' : 'élément'} téléchargé(s)
+              {downloads.length} {downloads.length > 1 ? 'contenus complets' : 'contenu complet'} enregistré(s)
             </span>
           </div>
         )}
@@ -54,10 +66,10 @@ export default function DownloadsView({
 
                 {/* Details */}
                 <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20 flex items-center space-x-1">
                       <WifiOff className="w-2.5 h-2.5" />
-                      <span>HORS-LIGNE PRÊT</span>
+                      <span>FICHIER COMPLET</span>
                     </span>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-amber-300">
                       {item.quality}
@@ -65,6 +77,12 @@ export default function DownloadsView({
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
                       {item.audio}
                     </span>
+                    {item.provider && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-800/90 text-emerald-400 border border-emerald-500/20 flex items-center space-x-1">
+                        <Server className="w-2.5 h-2.5" />
+                        <span>{item.provider}</span>
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-base font-bold text-white line-clamp-1">{item.title}</h3>
@@ -72,7 +90,7 @@ export default function DownloadsView({
                     <p className="text-xs text-red-400 font-medium">{item.episodeTitle}</p>
                   )}
                   <p className="text-xs text-zinc-400">
-                    Taille: <span className="text-zinc-200 font-semibold">{item.size}</span> • Téléchargé le {item.date}
+                    Taille : <span className="text-zinc-200 font-semibold">{item.size}</span> • Téléchargé le {item.date}
                   </p>
                 </div>
               </div>
@@ -86,6 +104,17 @@ export default function DownloadsView({
                   <Play className="w-3.5 h-3.5 fill-white" />
                   <span>Regarder</span>
                 </button>
+
+                {(item.downloadStreamUrl || item.directMp4Url) && (
+                  <button
+                    onClick={() => handleDirectSave(item)}
+                    className="flex items-center space-x-1.5 bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/30 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95"
+                    title="Enregistrer le fichier .MP4 sur l'appareil"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>.MP4</span>
+                  </button>
+                )}
 
                 <button
                   onClick={() => onDeleteDownload(item.id)}
@@ -105,7 +134,7 @@ export default function DownloadsView({
           </div>
           <h3 className="text-xl font-bold text-white">Aucun téléchargement pour le moment</h3>
           <p className="text-sm text-zinc-400 leading-relaxed">
-            Téléchargez vos films, séries et animés préférés pour pouvoir les regarder n'importe où, même sans connexion Internet (train, avion, voyages).
+            Téléchargez vos films, séries et animés préférés en version intégrale (.mp4) pour pouvoir les regarder n'importe où, même sans connexion Internet.
           </p>
           <button
             onClick={onExplore}
